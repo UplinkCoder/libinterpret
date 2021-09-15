@@ -1,0 +1,3 @@
+[submodule "lightning-d"]
+	path = lightning-d
+	url = https://github.com/UplinkCoder/lightning-d
