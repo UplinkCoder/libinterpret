@@ -5,6 +5,18 @@ module dmd.ctfe.bc_abi;
 
 import dmd.ctfe.bc_limits;
 
+enum PtrSize = 4;
+
+bool needsUserSize(BCTypeEnum type)
+{
+    with (BCTypeEnum) return type == Array || type == Struct;
+}
+
+bool typeIsPointerOnStack(BCTypeEnum type)
+{
+    with (BCTypeEnum) return type == Class;
+}
+
 /// appended to a struct
 /// behind the last member
 struct StructMetaData
@@ -49,4 +61,3 @@ struct DelegateDescriptor
     enum ContextPtrOffset = 4;
     enum Size = 8;
 }
-
