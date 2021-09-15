@@ -207,7 +207,6 @@ enum LongInst : ushort
     Comment,
     Line,
     File,
-    Push32,
 /+
     PushImm32,
     Alloca
@@ -1471,7 +1470,7 @@ struct BCGen
             assert(0, "I cannot deal with this type of return" ~ enumToString(val.vType));
         }
     }
-
+/+
     void Push(BCValue v)
     {
         const sz = basicTypeSize(v.typ.type);
@@ -1488,7 +1487,7 @@ struct BCGen
         }
         ip += 2;
     }
-
++/
     void IToF32(BCValue result, BCValue rhs)
     {
         assert(isStackValueOrParameter(result));
@@ -2294,7 +2293,7 @@ string printInstructions(const uint* startInstructions, uint length, const strin
 //else
 //{
     alias RE = void;
-    pragma(msg, "not chosing retained error branch");
+//    pragma(msg, "not chosing retained error branch");
 //}
 
 __gshared int[ushort.max * 2] byteCodeCache;
@@ -2597,7 +2596,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                 if (!__ctfe)
                 {
                     printf("StackIndex %d, Content %x\t".ptr, si, stack[cast(uint) si]);
-                    printf("HeapIndex %d, Content %x\n".ptr, si, heapPtr._heap[cast(uint) si]);
+                    printf("HeapIndex %d, Content %x\n".ptr, si, heapPtr.heapData[cast(uint) si]);
                 }
             }
         // debug if (!__ctfe) writeln("ip: ", ip);
@@ -3395,7 +3394,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             {
                 uint expP = ((*opRef) & uint.max);
                 debug { if (!__ctfe) writeln("*opRef: ", expP); } 
-                auto expTypeIdx = heapPtr._heap[expP + ClassMetaData.TypeIdIdxOffset];
+                auto expTypeIdx = heapPtr.heapData[expP + ClassMetaData.TypeIdIdxOffset];
                 auto expValue = BCValue(HeapAddr(expP), BCType(BCTypeEnum.Class, expTypeIdx));
                 expValue.vType = BCValueType.Exception;
 
@@ -3446,7 +3445,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
         case LongInst.HeapLoad8:
             {
                 assert(*rhs, "trying to deref null pointer inLine: " ~ itos(lastLine));
-                (*lhsRef) = heapPtr._heap[*rhs];
+                (*lhsRef) = heapPtr.heapData[*rhs];
                 debug
                 {
                     import std.stdio;
@@ -3457,7 +3456,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
         case LongInst.HeapStore8:
             {
                 assert(*lhsRef, "trying to deref null pointer SP[" ~ itos(cast(int)((lhsRef - &stackP[0])*4)) ~ "] at : &" ~ itos (ip - 2));
-                heapPtr._heap[*lhsRef] = ((*rhs) & 0xFF);
+                heapPtr.heapData[*lhsRef] = ((*rhs) & 0xFF);
                 debug
                 {
                     import std.stdio;
@@ -3473,8 +3472,8 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             {
                 assert(*rhs, "trying to deref null pointer inLine: " ~ itos(lastLine));
                 const addr = *lhsRef;
-                (*lhsRef) =  heapPtr._heap[addr]
-                          | (heapPtr._heap[addr + 1] << 8);
+                (*lhsRef) =  heapPtr.heapData[addr]
+                          | (heapPtr.heapData[addr + 1] << 8);
 
                 debug
                 {
@@ -3487,8 +3486,8 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             {
                 assert(*lhsRef, "trying to deref null pointer SP[" ~ itos(cast(int)((lhsRef - &stackP[0])*4)) ~ "] at : &" ~ itos (ip - 2));
                 const addr = *lhsRef;
-                heapPtr._heap[addr    ] = ((*rhs     ) & 0xFF);
-                heapPtr._heap[addr + 1] = ((*rhs >> 8) & 0xFF);
+                heapPtr.heapData[addr    ] = ((*rhs     ) & 0xFF);
+                heapPtr.heapData[addr + 1] = ((*rhs >> 8) & 0xFF);
                 debug
                 {
                     import std.stdio;
@@ -3503,7 +3502,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             case LongInst.HeapLoad32:
             {
                 assert(*rhs, "trying to deref null pointer inLine: " ~ itos(lastLine));
-                (*lhsRef) = loadu32(heapPtr._heap.ptr + *rhs);
+                (*lhsRef) = loadu32(heapPtr.heapData.ptr + *rhs);
                 debug
                 {
                     import std.stdio;
@@ -3514,8 +3513,8 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
         case LongInst.HeapStore32:
             {
                 assert(*lhsRef, "trying to deref null pointer SP[" ~ itos(cast(int)((lhsRef - &stackP[0])*4)) ~ "] at : &" ~ itos (ip - 2));
-                //(*(heapPtr._heap.ptr + *lhsRef)) = (*rhs) & 0xFF_FF_FF_FF;
-                storeu32((&heapPtr._heap[*lhsRef]),  (*rhs) & uint.max);
+                //(*(heapPtr.heapData.ptr + *lhsRef)) = (*rhs) & 0xFF_FF_FF_FF;
+                storeu32((&heapPtr.heapData[*lhsRef]),  (*rhs) & uint.max);
 
                 debug
                 {
@@ -3532,8 +3531,8 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             {
                 assert(*rhs, "trying to deref null pointer ");
                 const addr = *rhs;
-                (*lhsRef) =       loadu32(&heapPtr._heap[addr])
-                          | ulong(loadu32(&heapPtr._heap[addr + 4])) << 32UL;
+                (*lhsRef) =       loadu32(&heapPtr.heapData[addr])
+                          | ulong(loadu32(&heapPtr.heapData[addr + 4])) << 32UL;
 
                 debug
                 {
@@ -3551,12 +3550,12 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                 assert(*lhsRef, "trying to deref null pointer SP[" ~ itos(cast(int)(lhsRef - &stackP[0])*4) ~ "] at : &" ~ itos (ip - 2));
                 const heapOffset = *lhsRef;
                 assert(heapOffset < heapPtr.heapSize, "Store out of range at ip: &" ~ itos(ip - 2) ~ " atLine: " ~ itos(lastLine));
-                auto basePtr = (heapPtr._heap.ptr + *lhsRef);
+                auto basePtr = (heapPtr.heapData.ptr + *lhsRef);
                 const addr = *lhsRef;
                 const value = *rhs;
 
-                storeu32(&heapPtr._heap[addr],     value & uint.max);
-                storeu32(&heapPtr._heap[addr + 4], cast(uint)(value >> 32));
+                storeu32(&heapPtr.heapData[addr],     value & uint.max);
+                storeu32(&heapPtr.heapData[addr + 4], cast(uint)(value >> 32));
             }
             break;
 
@@ -3610,8 +3609,8 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                     if ((lw & ushort.max) >> 8)
                     {
                         auto offset = *opRef;
-                        auto length = heapPtr._heap[offset];
-                        auto string_start = cast(char*)&heapPtr._heap[offset + 1];
+                        auto length = heapPtr.heapData[offset];
+                        auto string_start = cast(char*)&heapPtr.heapData[offset + 1];
                         printf("Printing string: '%.*s'\n", length, string_start);
                     }
                     else
@@ -3648,8 +3647,8 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                     const uint _lhs =  *lhsRef & uint.max;
                     const uint _rhs =  *rhs & uint.max;
 
-                    const llbasep = &heapPtr._heap[_lhs + SliceDescriptor.LengthOffset];
-                    const rlbasep = &heapPtr._heap[_rhs + SliceDescriptor.LengthOffset];
+                    const llbasep = &heapPtr.heapData[_lhs + SliceDescriptor.LengthOffset];
+                    const rlbasep = &heapPtr.heapData[_rhs + SliceDescriptor.LengthOffset];
 
                     const lhs_length = _lhs ? loadu32(llbasep) : 0;
                     const rhs_length = _rhs ? loadu32(rlbasep) : 0;
@@ -3657,8 +3656,8 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                     if (const newLength = lhs_length + rhs_length)
                     {
                         // TODO if lhs.capacity bla bla
-                        const lhsBase = loadu32(&heapPtr._heap[_lhs + SliceDescriptor.BaseOffset]);
-                        const rhsBase = loadu32(&heapPtr._heap[_rhs + SliceDescriptor.BaseOffset]);
+                        const lhsBase = loadu32(&heapPtr.heapData[_lhs + SliceDescriptor.BaseOffset]);
+                        const rhsBase = loadu32(&heapPtr.heapData[_rhs + SliceDescriptor.BaseOffset]);
 
                         const resultPtr = heapPtr.heapSize;
 
@@ -3682,10 +3681,10 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                                     align4(cast(uint)(heapPtr.heapMax + allocSize)) * 4);
 
                                 auto newHeap = new ubyte[](newHeapSize);
-                                newHeap[0 .. heapSize] = heapPtr._heap[0 .. heapSize];
-                                if (!__ctfe) heapPtr._heap.destroy();
+                                newHeap[0 .. heapSize] = heapPtr.heapData[0 .. heapSize];
+                                if (!__ctfe) heapPtr.heapData.destroy();
 
-                                heapPtr._heap = newHeap;
+                                heapPtr.heapData = newHeap;
                                 heapPtr.heapMax = newHeapSize;
                             }
                         }
@@ -3696,14 +3695,14 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                         const scaled_rhs_length = (rhs_length * elemSize);
                         const result_lhs_end    = resultBase + scaled_lhs_length;
 
-                        storeu32(&heapPtr._heap[resultBaseP],  resultBase);
-                        storeu32(&heapPtr._heap[resultLengthP], newLength);
+                        storeu32(&heapPtr.heapData[resultBaseP],  resultBase);
+                        storeu32(&heapPtr.heapData[resultLengthP], newLength);
 
-                        heapPtr._heap[resultBase .. result_lhs_end] =
-                            heapPtr._heap[lhsBase .. lhsBase + scaled_lhs_length];
+                        heapPtr.heapData[resultBase .. result_lhs_end] =
+                            heapPtr.heapData[lhsBase .. lhsBase + scaled_lhs_length];
 
-                        heapPtr._heap[result_lhs_end ..  result_lhs_end + scaled_rhs_length] =
-                            heapPtr._heap[rhsBase .. rhsBase + scaled_rhs_length];
+                        heapPtr.heapData[result_lhs_end ..  result_lhs_end + scaled_rhs_length] =
+                            heapPtr.heapData[rhsBase .. rhsBase + scaled_rhs_length];
 
                         *lhsStackRef = resultPtr;
                     }
@@ -3798,10 +3797,10 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                             align4(cast(uint)(heapPtr.heapMax + allocSize)) * 2);
 
                         auto newHeap = new ubyte[](newHeapSize);
-                        newHeap[0 .. heapSize] = heapPtr._heap[0 .. heapSize];
-                        if (!__ctfe) heapPtr._heap.destroy();
+                        newHeap[0 .. heapSize] = heapPtr.heapData[0 .. heapSize];
+                        if (!__ctfe) heapPtr.heapData.destroy();
 
-                        heapPtr._heap = newHeap;
+                        heapPtr.heapData = newHeap;
                         heapPtr.heapMax = newHeapSize;
                     }
                 }
@@ -3837,7 +3836,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
 
                     assert(cpyDst >= cpySrc + cpySize || cpyDst + cpySize <= cpySrc, "Overlapping MemCpy is not supported --- src: " ~ itos(cpySrc)
                         ~ " dst: " ~ itos(cpyDst) ~ " size: " ~ itos(cpySize));
-                    heapPtr._heap[cpyDst .. cpyDst + cpySize] = heapPtr._heap[cpySrc .. cpySrc + cpySize];
+                    heapPtr.heapData[cpyDst .. cpyDst + cpySize] = heapPtr.heapData[cpySrc .. cpySrc + cpySize];
                 }
             }
             break;
@@ -3861,16 +3860,16 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                 }
                 else
                 {
-                    immutable lhUlength = heapPtr._heap[_lhs + SliceDescriptor.LengthOffset];
-                    immutable rhUlength = heapPtr._heap[_rhs + SliceDescriptor.LengthOffset];
+                    immutable lhUlength = heapPtr.heapData[_lhs + SliceDescriptor.LengthOffset];
+                    immutable rhUlength = heapPtr.heapData[_rhs + SliceDescriptor.LengthOffset];
                     if (lhUlength == rhUlength)
                     {
-                        immutable lhsBase = heapPtr._heap[_lhs + SliceDescriptor.BaseOffset];
-                        immutable rhsBase = heapPtr._heap[_rhs + SliceDescriptor.BaseOffset];
+                        immutable lhsBase = heapPtr.heapData[_lhs + SliceDescriptor.BaseOffset];
+                        immutable rhsBase = heapPtr.heapData[_rhs + SliceDescriptor.BaseOffset];
                         cond = true;
                         foreach (i; 0 .. lhUlength)
                         {
-                            if (heapPtr._heap[rhsBase + i] != heapPtr._heap[lhsBase + i])
+                            if (heapPtr.heapData[rhsBase + i] != heapPtr.heapData[lhsBase + i])
                             {
                                 cond = false;
                                 break;
