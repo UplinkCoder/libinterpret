@@ -37,13 +37,22 @@ struct RegisterState
     uint nextEvictim()
     {
         return evictionCounter++ % nRegs;
-    }
+    } 
 }
 
-struct LightingGen
+struct LightningGen
 {
     jit_state* _jit;
     RegisterState regs;
+    LightningFunction *functions;
+
+    alias LightningLabel = typeof(_jit_label(jit_state_t.init)); 
+
+    LightningLabel* labels;
+    uint labelCount;
+    uint labelMaxCount;
+
+    uint currentFrameOffset;
 
     struct ReturnValue
     {
@@ -63,7 +72,7 @@ struct LightingGen
         BCValueType type;
     }
 
-    alias jit_fn = extern (C) int function (BCHeap * heap, int nArgs, ReturnValue* returnValue);
+    alias jit_fn = extern (C) int function (BCHeap * heap, ReturnValue* returnValue); 
 
     void Initialize()
     {
@@ -71,6 +80,9 @@ struct LightingGen
         if (_jit) _jit_destroy_state(_jit);
         else init_jit(null);
         _jit = jit_new_state();
+        labelMaxCount = 4096;
+        labels = malloc((*labels).sizeof * labelMaxCount);
+        assert(labels !is null);
     }
 
     void Finalize()
@@ -84,7 +96,7 @@ struct LightingGen
     /// either we already have it in a register
     /// or we allocate a register for it
     /// if needed we evict a value
-    jit_reg_t getReg(BCValue v)
+    jit_reg_t getReg(BCValue v) 
     {
         jit_reg_t result = JIT_NOREG;
 
@@ -166,13 +178,68 @@ struct LightingGen
 
     bool insideFunction = false;
 
-    void beginFunction(uint f = 0, void* fnDecl = null)  { assert(0, "Not Implemented yet"); }
-    void endFunction() { assert(0, "Not Implemented yet"); }
-    BCLabel genLabel() { assert(0, "Not Implemented yet"); }
-    BCValue genParameter(BCType bct, string name = null) { assert(0, "Not Implemented yet"); }
-    BCValue genTemporary(BCType bct) { assert(0, "Not Implemented yet"); }
-    void destroyTemporary(BCValue tmp) { assert(0, "Not Implemented yet"); }
-    BCValue genLocal(BCType bct, string name) { assert(0, "Not Implemented yet"); }
+    void beginFunction(uint f = 0, void* fnDecl = null)
+    {
+        assert(currentFrameOffset == 0, "by the time we have call beginFunction either we are freshly initalized or have called endFunction before");
+        assert(0, "Not properly implemented yet");
+    }
+    //{ assert(0, "Not Implemented yet"); }
+    void endFunction()
+    {
+        currentFrameOffset = 0;
+        assert(0, "Not properly implemented yet");
+    }
+
+    BCLabel genLabel()
+    {
+        lables[labelCount++] = _jit_label(_jit);
+        return BCLabel(labelCount);
+    }
+
+    BCValue genParameter(BCType bct, string name, uint userSize = 0)
+    {
+        assert(!needsUserSize(bct.type) || userSize > 0);
+        ++parameterCount;
+        parameters[parameterCount] = BCParameter(parameterCount, bct, currentFrameOffset);
+        auto stackSize = (isTypePointerOnStack(bct.type ? PtrSize :  basicTypeSize(bct.type)));
+        if (needsUserSize(bct.type))
+        {
+            stackSize = userSize;
+        }
+        currentFrameOffset += stackSize;
+    }
+
+    BCValue genTemporary(BCType bct, uint userSize = 0)
+    {
+        assert(!needsUserSize(bct.type) || userSize > 0);
+        ++parameterCount;
+        parameters[parameterCount] = BCParameter(parameterCount, bct, currentFrameOffset);
+        auto stackSize = (isTypePointerOnStack(bct.type ? PtrSize :  basicTypeSize(bct.type)));
+        if (needsUserSize(bct.type))
+        {
+            stackSize = userSize;
+        }
+        currentFrameOffset += stackSize;
+    }
+
+    void destroyTemporary(BCValue tmp, uint userSize = 0)
+    {
+        assert(!needsUserSize(bct.type) || userSize > 0);
+    }
+
+    BCValue genLocal(BCType bct, string name, userSize = 0)
+    {
+        assert(!needsUserSize(bct.type) || userSize > 0);
+        ++parameterCount;
+        parameters[parameterCount] = BCParameter(parameterCount, bct, currentFrameOffset);
+        auto stackSize = (isTypePointerOnStack(bct.type ? PtrSize :  basicTypeSize(bct.type)));
+        if (needsUserSize(bct.type))
+        {
+            stackSize = userSize;
+        }
+        currentFrameOffset += stackSize;
+    }
+
     BCAddr beginJmp() { assert(0, "Not Implemented yet"); }
     void endJmp(BCAddr atIp, BCLabel target) { assert(0, "Not Implemented yet"); }
     void Jmp(BCLabel target) { assert(0, "Not Implemented yet"); }
@@ -216,7 +283,29 @@ struct LightingGen
             assert (0, "only integers are supported right now");
         markUnused(lhs_r);
     }
-    void Sub3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
+    void Sub3(BCValue result, BCValue lhs, BCValue rhs)
+    {
+        auto lhs_r = getReg(lhs);
+        sync_reg(lhs, lhs_r);
+        auto res_r = getReg(result);
+        if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
+        {
+            if (rhs.vType == BCValueType.Immediate)
+            {
+                _jit_new_node_www(_jit, jit_code_t.jit_code_subi, res_r, lhs_r, rhs.imm32.imm32);
+            }
+            else
+            {
+                auto rhs_r = getReg(rhs);
+                _jit_new_node_www(_jit, jit_code_t.jit_code_subr, res_r, lhs_r, rhs_r);
+                markUnused(rhs_r);
+            }
+        }
+        else
+            assert (0, "only integers are supported right now");
+        markUnused(lhs_r);
+        syncReg(result, res_r);
+    }
     void Mul3(BCValue result, BCValue lhs, BCValue rhs)
     {
         auto lhs_r = getReg(lhs);
