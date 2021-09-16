@@ -337,11 +337,28 @@ Lret:
     return result;
 }
 
-struct RegStatusList(int NREGS)
+struct RegStatusList(int STATIC_NREGS)
 {
-    static assert(NREGS < 32);
-    
-    uint freeBitfield = ((1 << NREGS) - 1);
+    static assert(STATIC_NREGS < 32);
+
+    static if (STATIC_NREGS == 0)
+    {
+        const int NREGS;
+        uint freeBitfield;
+
+        this(int NREGS) pure
+        {
+            assert(NREGS < 32, "extending freeBitField is not yet done");
+            this.NREGS = NREGS;
+            freeBitfield = ((1 << NREGS) - 1);
+        }
+    }
+    else
+    {
+        alias NREGS = STATIC_NREGS;
+        uint freeBitfield = ((1 << NREGS) - 1);
+    }
+
     uint unusedBitfield = 0;
     uint dirtyBitfield = 0;
     
@@ -433,6 +450,13 @@ struct RegStatusList(int NREGS)
         assert(regIdx < NREGS);
         return (dirtyBitfield & (1 << regIdx)) != 0;
     }
+
+    bool isUnused(int regIdx)
+    {
+        pragma(inline, true);
+        assert(regIdx < NREGS);
+        return (freeBitfield & (1 << regIdx)) != 0;
+    }
 }
 
 
@@ -440,7 +464,7 @@ static assert(()
     {
         enum INVALID_IDX = uint.max;
         RegStatusList!16 f;
-        
+
         assert(f.n_free == 16);
         assert(f.nextDirty() == INVALID_IDX);
         assert(f.nextUnused() == INVALID_IDX);
@@ -459,7 +483,10 @@ static assert(()
             f.markUsed(nextUnused);
         }
         assert(f.nextUnused() == INVALID_IDX);
-        
+
+        RegStatusList!0 d = RegStatusList!0(2);
+        assert(d.n_free() == 2);
+
         return true;
     }
 ());
@@ -522,15 +549,17 @@ const(ubyte) toParamCode(const BCValue val) pure @safe @nogc
 }
 
 enum heapSizeOffset = BCHeap.init.heapSize.offsetof;
-enum heapMaxOffset = BCHeap.init.heapMax.offsetof;
+enum heapMaxOffset =  BCHeap.init.heapMax.offsetof;
 enum heapDataOffset = BCHeap.init.heapData.offsetof;
+enum heapDataLengthOffset = heapDataOffset + 0;             /*[].length.offsetof;*/
+enum heapDataPtrOffset =    heapDataOffset + size_t.sizeof; /*[].ptr.offsetof;*/
 
 struct BCHeap
 {
     enum initHeapMax = (2 ^^ 15);
     uint heapMax = initHeapMax;
-    ubyte[] heapData = new ubyte[](initHeapMax);
     uint heapSize = 4;
+    ubyte[] heapData = new ubyte[](initHeapMax);
 }
 
 struct BCLabel
