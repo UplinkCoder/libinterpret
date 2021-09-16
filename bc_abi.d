@@ -2,7 +2,7 @@
 /// sizes and offsets are in Bytes
 
 module dmd.ctfe.bc_abi;
-
+import dmd.ctfe.bc_common;
 import dmd.ctfe.bc_limits;
 
 enum PtrSize = 4;

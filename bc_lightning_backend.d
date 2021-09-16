@@ -24,7 +24,16 @@ else version (X86)
 }
 else static assert(0, "Architecture unsupported");
 
-
+struct LightningFunction
+{
+    int fIdx;
+    BCParameter[64] parameters;
+    byte parameterCount;
+    BCValue[bc_max_locals] temporaries;
+    ushort temporaryCount;
+    BCLocal[bc_max_locals] locals;
+    ushort localCount;
+}
 
 struct RegisterState
 {
@@ -37,7 +46,7 @@ struct RegisterState
     uint nextEvictim()
     {
         return evictionCounter++ % nRegs;
-    } 
+    }
 }
 
 struct LightningGen
@@ -45,14 +54,22 @@ struct LightningGen
     jit_state* _jit;
     RegisterState regs;
     LightningFunction *functions;
+    uint functionCount;
 
-    alias LightningLabel = typeof(_jit_label(jit_state_t.init)); 
+    alias currentFunction this;
 
-    LightningLabel* labels;
+    @property LightningFunction* currentFunction() return
+    {
+        return functionCount ? &functions[functionCount - 1] : null;
+    }
+
+    alias LightningLabel = typeof(_jit_label(cast(jit_state_t*)null));
+
+    LightningLabel[] labels;
     uint labelCount;
     uint labelMaxCount;
 
-    uint currentFrameOffset;
+    StackAddr currentFrameOffset;
 
     struct ReturnValue
     {
@@ -72,7 +89,7 @@ struct LightningGen
         BCValueType type;
     }
 
-    alias jit_fn = extern (C) int function (BCHeap * heap, ReturnValue* returnValue); 
+    alias jit_fn = extern (C) int function (BCHeap * heap, ReturnValue* returnValue);
 
     void Initialize()
     {
@@ -81,7 +98,10 @@ struct LightningGen
         else init_jit(null);
         _jit = jit_new_state();
         labelMaxCount = 4096;
-        labels = malloc((*labels).sizeof * labelMaxCount);
+        import core.stdc.stdlib;
+        labels = (cast(LightningLabel*)malloc(
+            (labels[0]).sizeof * labelMaxCount
+        ))[0 .. labelMaxCount];
         assert(labels !is null);
     }
 
@@ -96,7 +116,7 @@ struct LightningGen
     /// either we already have it in a register
     /// or we allocate a register for it
     /// if needed we evict a value
-    jit_reg_t getReg(BCValue v) 
+    jit_reg_t getReg(BCValue v)
     {
         jit_reg_t result = JIT_NOREG;
 
@@ -180,10 +200,12 @@ struct LightningGen
 
     void beginFunction(uint f = 0, void* fnDecl = null)
     {
+        functionCount++;
+        fIdx = f;
         assert(currentFrameOffset == 0, "by the time we have call beginFunction either we are freshly initalized or have called endFunction before");
         assert(0, "Not properly implemented yet");
     }
-    //{ assert(0, "Not Implemented yet"); }
+
     void endFunction()
     {
         currentFrameOffset = 0;
@@ -192,69 +214,101 @@ struct LightningGen
 
     BCLabel genLabel()
     {
-        lables[labelCount++] = _jit_label(_jit);
-        return BCLabel(labelCount);
+        labels[labelCount++] = _jit_label(_jit);
+        return BCLabel(BCAddr(labelCount));
     }
 
     BCValue genParameter(BCType bct, string name, uint userSize = 0)
     {
         assert(!needsUserSize(bct.type) || userSize > 0);
+        const stackAddr = currentFrameOffset;
         ++parameterCount;
-        parameters[parameterCount] = BCParameter(parameterCount, bct, currentFrameOffset);
-        auto stackSize = (isTypePointerOnStack(bct.type ? PtrSize :  basicTypeSize(bct.type)));
+        parameters[parameterCount - 1] = BCParameter(parameterCount, bct, currentFrameOffset);
+        auto stackSize = (typeIsPointerOnStack(bct.type) ? PtrSize :  basicTypeSize(bct.type));
         if (needsUserSize(bct.type))
         {
             stackSize = userSize;
         }
         currentFrameOffset += stackSize;
+        return BCValue(parameters[parameterCount - 1]);
     }
 
     BCValue genTemporary(BCType bct, uint userSize = 0)
     {
         assert(!needsUserSize(bct.type) || userSize > 0);
-        ++parameterCount;
-        parameters[parameterCount] = BCParameter(parameterCount, bct, currentFrameOffset);
-        auto stackSize = (isTypePointerOnStack(bct.type ? PtrSize :  basicTypeSize(bct.type)));
+        ++temporaryCount;
+        temporaries[temporaryCount - 1] = BCValue(currentFrameOffset, bct, temporaryCount);
+        auto stackSize = (typeIsPointerOnStack(bct.type) ? PtrSize :  basicTypeSize(bct.type));
         if (needsUserSize(bct.type))
         {
             stackSize = userSize;
         }
         currentFrameOffset += stackSize;
+
+        return temporaries[temporaryCount - 1];
     }
 
-    void destroyTemporary(BCValue tmp, uint userSize = 0)
+    void destroyTemporary(BCType bct, uint userSize = 0)
     {
         assert(!needsUserSize(bct.type) || userSize > 0);
     }
 
-    BCValue genLocal(BCType bct, string name, userSize = 0)
+    BCValue genLocal(BCType bct, string name, uint userSize = 0)
     {
         assert(!needsUserSize(bct.type) || userSize > 0);
-        ++parameterCount;
-        parameters[parameterCount] = BCParameter(parameterCount, bct, currentFrameOffset);
-        auto stackSize = (isTypePointerOnStack(bct.type ? PtrSize :  basicTypeSize(bct.type)));
+        ++localCount;
+        auto localIdx = localCount;
+        auto localAddr = currentFrameOffset;
+        locals[localCount - 1] = BCLocal(localIdx, bct, localAddr, name);
+        auto stackSize = (typeIsPointerOnStack(bct.type) ? PtrSize :  basicTypeSize(bct.type));
         if (needsUserSize(bct.type))
         {
             stackSize = userSize;
         }
         currentFrameOffset += stackSize;
+        // this(const StackAddr sp, const BCType type, const ushort localIndex, string name)
+        return BCValue(localAddr, bct, localIdx, name);
     }
 
     BCAddr beginJmp() { assert(0, "Not Implemented yet"); }
     void endJmp(BCAddr atIp, BCLabel target) { assert(0, "Not Implemented yet"); }
     void Jmp(BCLabel target) { assert(0, "Not Implemented yet"); }
-    CndJmpBegin beginCndJmp(BCValue cond = BCValue.init, bool ifTrue = false) { assert(0, "Not Implemented yet"); }
+
+    /// peform a conditional jmp based on the value of the parameter cond
+    /// BCValue.init is special and means jmp based upon the last condition flag
+    CndJmpBegin beginCndJmp(BCValue cond = BCValue.init, bool ifTrue = false)
+    {
+        assert(0, "Not Implemented yet");
+    }
     void endCndJmp(CndJmpBegin jmp, BCLabel target) { assert(0, "Not Implemented yet"); }
     void emitFlg(BCValue lhs) { assert(0, "Not Implemented yet"); }
     void Throw(BCValue e) { assert(0, "Not Implemented yet"); }
     void PushCatch() { assert(0, "Not Implemented yet"); }
     void PopCatch() { assert(0, "Not Implemented yet"); }
-    void Set(BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
+    void Set(BCValue lhs, BCValue rhs)
+    {
+        assert(basicTypeSize(lhs.type.type) <= 4);
+        auto lhs_r = getReg(lhs);
+        if (rhs.vType == BCValueType.Immediate)
+        {
+            _jit_new_node_ww(_jit, jit_code_t.jit_code_movi, lhs_r, rhs.imm32.imm32);
+        }
+        else
+        {
+            auto rhs_r = getReg(rhs);
+            _jit_new_node_ww(_jit, jit_code_t.jit_code_movr, lhs_r, rhs_r);
+            markUnused(rhs_r);
+        }
+    }
+
     void Ult3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
     void Ugt3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
     void Ule3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
     void Uge3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
-    void Lt3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
+    void Lt3(BCValue result, BCValue lhs, BCValue rhs)
+    {
+        { assert(0, "Not Implemented yet"); }
+    }
     void Gt3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
     void Le3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
     void Ge3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
@@ -304,7 +358,7 @@ struct LightningGen
         else
             assert (0, "only integers are supported right now");
         markUnused(lhs_r);
-        syncReg(result, res_r);
+        sync_reg(result, res_r);
     }
     void Mul3(BCValue result, BCValue lhs, BCValue rhs)
     {
