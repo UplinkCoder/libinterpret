@@ -599,6 +599,7 @@ struct BCParameter
     ubyte idx;
     BCType type;
     StackAddr pOffset;
+    string name;
 }
 
 struct HeapAddr
@@ -811,14 +812,15 @@ struct BCValue
 
     string toString() const pure @safe
     {
-
         string result = "vType: ";
         result ~= enumToString(vType);
         result ~= "\tType: "; 
         result ~= type.toString;
-        result ~= "\tValue: ";
+        result ~= "\n\tValue: ";
         result ~= valueToString;
         result ~= "\n";
+        if (name)
+            result ~= "\tname: " ~ name ~ "\n";
 
         return result;
     }
@@ -929,6 +931,7 @@ struct BCValue
         this.type = param.type;
         this.paramIndex = param.idx;
         this.stackAddr = param.pOffset;
+        this.name = param.name;
     }
 
     this(const StackAddr sp, const BCType type, const ushort tmpIndex = 0) pure

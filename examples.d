@@ -1,7 +1,7 @@
 import dmd.ctfe.bc_common;
 import dmd.ctfe.bc;
 // Fact(n) = (n > 1 ? ( n*(n-1) * Fact(n-2) ) : 1);
-auto testFact(GenT)(GenT gen)
+auto testFact(GenT)(auto ref GenT gen)
 {
     with (gen)
     {

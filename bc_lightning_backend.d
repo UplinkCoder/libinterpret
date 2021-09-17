@@ -109,7 +109,6 @@ struct RuntimeContext
 }
 
 alias register_index = uint;
-enum register_index INVALID_IDX = 0;
 
 enum ContextOffset
 {
@@ -152,7 +151,7 @@ bool NoRegister(register_index regIdx)
 
 static register_index reg2idx(jit_reg_t reg)
 {
-    assert(reg <= jit_v(0) && reg >= jit_v(jit_v_num()),
+    assert(reg >= jit_v(0) && reg < jit_v(jit_v_num()),
         "register is not a valid v-reg: " ~ enumToString(reg));
     return (reg  - jit_v(0)) + 1;
 }
@@ -185,8 +184,8 @@ struct RegisterState
     void set_paired(jit_reg_t reg1, jit_reg_t reg2)
     {
         assert(regStatus.isUnused(reg1) && regStatus.isUnused(reg2));
-        assert(pairedWith[reg1] == INVALID_IDX &&
-               pairedWith[reg2] == INVALID_IDX);
+        assert(pairedWith[reg1] == 0 &&
+               pairedWith[reg2] == 0);
         const idx1 = reg1 - jit_v(0);
         const idx2 = reg2 - jit_v(0);
 
@@ -221,7 +220,7 @@ struct RegisterState
         assert(reg >= jit_v(0) && reg < jit_v(jit_v_num()));
         const idx = reg - jit_v(0);
         const pair_idx = pairedWith[idx];
-        if (pair_idx != INVALID_IDX)
+        if (pair_idx != 0)
         {
             return pair_idx;
         }
@@ -238,7 +237,7 @@ struct RegisterState
     // it's a pun ... I could not resist.
     uint nextEvictim()
     {
-        return evictionCounter++ % nRegs;
+        return (evictionCounter++ % nRegs) + 1;
     }
     bool[nTempRegs] spilled;
     bool r2HasCond;
@@ -314,9 +313,9 @@ struct LightningGen
         {
             if (frameOffset == v.stackAddr)
             {
-                assert(regs.pairedWith[i] == INVALID_IDX);
-                regs.regStatus.markUsed(i);
-                return i;
+                assert(regs.pairedWith[i] == 0);
+                regs.regStatus.markUsed(i + 1);
+                return i + 1;
             }
         }
         return allocReg(v.stackAddr);
@@ -327,20 +326,21 @@ struct LightningGen
     /// if needed we evict a value
     register_index getSingleRegisterIndex(BCValue v)
     {
+        assert(v);
         append("reg_alloc.log", cast(void[])("\nrequesting reg for: " ~ v.toString()));
 
         foreach(int i, frameOffset;regs.frameOffsetInReg)
         {
             if (frameOffset == v.stackAddr)
             {
-                append("reg_alloc.log", cast(void[])("... found in regIdx: " ~ itos(i)));
+                append("reg_alloc.log", cast(void[])("... found in regIdx: " ~ itos(i)) ~"\n");
                 
                 assert(!regs.pairedWith[i]);
-                regs.regStatus.markUsed(i);
+                regs.regStatus.markUsed(i + 1);
                 return i + 1;
             }
         }
-        
+        append("reg_alloc.log", cast(void[])("... not found in register allocation table .. allocating ... \n"));
         return allocReg(v.stackAddr, true);
     }
 
@@ -352,13 +352,13 @@ struct LightningGen
         {
             const iReg =
                 cast(int)(getSingleRegisterIndex(v));
-            assert(iReg < jit_v_num() && iReg >= 0);
-            return jit_v(iReg);
+            assert(iReg <= jit_v_num() && iReg > 0);
+            return jit_v(iReg - 1);
         }
         else
         {
             // return JIT_NOREG;
-            assert(0);
+            assert(0, "we should never have gotten here, value doesn't fit into a single reg");
         }
     }
     
@@ -368,6 +368,7 @@ struct LightningGen
     void write_stack(ushort fOffset, register_index reg)
     {
         assert(reg);
+        assert(regs.regStatus.isDirty(reg & 0xFFFF), "syncing a non dirtied register");
         _jit_getarg_ptrint(jit_r(0), context_arg);
         const framePointerReg = jit_r(1);
         // load fp into framePointer reg
@@ -418,25 +419,26 @@ struct LightningGen
         }
     }
 
-    register_index allocReg(ushort fOffset, bool notPaired = false)
+    register_index allocReg(ushort fOffset, bool wantPair = false)
     {
-        register_index result = INVALID_IDX;
+        register_index result = 0;
         with(regs) with(regStatus)
         {
             // first let's look for a free register.
             register_index nextReg = nextFree();
-            if (nextReg != INVALID_IDX)
+            if (nextReg != 0)
             {
-                assert(pairedWith[nextReg] == INVALID_IDX, "free register cannot have pairing relationships!");
+                assert(pairedWith[nextReg - 1] == 0, "free register cannot have pairing relationships!");
                 // we have a free register let's use it
                 regs.regStatus.markUsed(nextReg);
-                frameOffsetInReg[nextReg] = fOffset;
-                result = jit_v(nextReg);
+                frameOffsetInReg[nextReg - 1] = fOffset;
+                result = nextReg;
+                append("reg_alloc.log", cast(void[])("... Found free Reg: " ~ enumToString(jit_v(result - 1))) ~ "\n\n");
             }
             // no free register now we need to evict ... sigh
             // first let's look for someome marked for eviction
             register_index unusedReg = nextUnused();
-            if (result == INVALID_IDX && unusedReg != INVALID_IDX)
+            if (result == 0 && unusedReg != 0)
             {
                 // depending on wheter we need a register pair or not we have to do
                 // diffrent things here.
@@ -445,55 +447,67 @@ struct LightningGen
                 // let's see if we can find a single one
                 // for easier searching lets start with a while loop right away
                 typeof(unusedBitfield) masked = unusedBitfield;
-                
+
                 // we keep searching for a long as there are unused regs
                 // for one which is a single pair
-                auto pair_idx = pairedWith[unusedReg];
-                while (pair_idx != INVALID_IDX)
+                auto pair_idx = pairedWith[unusedReg - 1];
+                while ((!!pair_idx) != wantPair)
                 {
-                    masked &= (~(1 << unusedReg));
+                    masked &= (~(1 << (unusedReg - 1)));
                     if (masked != 0)
                     {
                         import core.bitop : bsf;
                         unusedReg = bsf(masked);
-                        pair_idx = pairedWith[unusedReg];
+                        pair_idx = pairedWith[unusedReg - 1];
                     }
                 }
                 // if we don't find one we split the last unused paired reg
-                if (pair_idx != INVALID_IDX)
+                if (pair_idx)
                 {
                     // if our last canidate is paired we need to unpair it
                     // of course it's partner should also be unused.
-                    const idx1 = (pair_idx & 0xFFFF) - 1;
-                    const idx2 = (pair_idx >> 16) - 1;
+                    const idx1 = (pair_idx & 0xFFFF);
+                    const idx2 = (pair_idx >> 16);
                     assert(isUnused(idx1) && isUnused(idx2));
                     unpair(pair_idx);
                 }
-                markUsed(unusedReg);
-            } else
+                else
+                {
+                    if (regs.regStatus.isDirty(unusedReg))
+                    {
+                        const reg = jit_v(unusedReg - 1);
+                        const syncWithOffset = frameOffsetInReg[result - 1];
+                        write_stack(syncWithOffset, reg);
+                    }
+                }
+
+                result = unusedReg;
+            } else if (!result)
                 // we got no one marked for evication
                 // well then we get a 'random' canidate and force evict
             {
                 auto nextEvict = nextEvictim();
                 const pair_idx = pairedWith[nextEvict];
-                result = jit_v(nextEvict);
+                result = nextEvict;
                 // we sync on eviction
                 // now we need to unpair if needed
-                if (pair_idx != INVALID_IDX)
+                if (pair_idx != 0)
                 {
                     unpair(pair_idx);
                 }
                 else
                 {
-                    
+                    const reg = jit_v(result - 1);
+                    const syncWithOffset = frameOffsetInReg[result - 1];
+                    write_stack(syncWithOffset, reg);
                 }
             }
 
             assert(!regs.regStatus.isDirty(result));
             /// 
-            const low_idx = result & 0xFFFF;
-            frameOffsetInReg[low_idx] = fOffset;
-            assert(result != INVALID_IDX);
+            const low_idx = (result & 0xFFFF);
+            frameOffsetInReg[low_idx - 1] = fOffset;
+            assert(result != 0);
             read_stack(fOffset, result);
 
         }
@@ -513,8 +527,8 @@ struct LightningGen
         write_stack(fOffset, idx);
         const hi_idx = idx >> 16;
         
-        regs.pairedWith[lw_idx] = INVALID_IDX;
-        regs.pairedWith[hi_idx] = INVALID_IDX;
+        regs.pairedWith[lw_idx] = 0;
+        regs.pairedWith[hi_idx] = 0;
         
         regs.regStatus.markFree(lw_idx);
         regs.regStatus.markFree(hi_idx);
@@ -550,6 +564,7 @@ struct LightningGen
         if (_jit) _jit_destroy_state(_jit);
         else init_jit(null);
         _jit = jit_new_state();
+        currentFrameOffset = 4; // we don't start at zero because 0 is a special error value
         labelMaxCount = 4096;
         import core.stdc.stdlib;
         labels = (cast(LightningLabel*)malloc(
@@ -600,9 +615,8 @@ struct LightningGen
         assert(!needsUserSize(bct.type) || userSize > 0);
         const stackAddr = currentFrameOffset;
 
-
         ++parameterCount;
-        auto p = BCParameter(parameterCount, bct, currentFrameOffset);
+        auto p = BCParameter(parameterCount, bct, currentFrameOffset, name);
         parameters[parameterCount] = p;
 
         auto stackSize = (typeIsPointerOnStack(bct.type) ? PtrSize :  basicTypeSize(bct.type));
@@ -688,7 +702,7 @@ struct LightningGen
     CndJmpBegin beginCndJmp(BCValue cond = BCValue.init, bool ifTrue = false)
     {
         auto flagReg = JIT_R2;
-        if (cond == BCValue.init)
+        if (!cond)
         {
             assert(regs.r2HasCond);
         }
@@ -755,7 +769,7 @@ struct LightningGen
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto result_r = JIT_R2;
-        if (result == BCValue.init)
+        if (!result)
         {
             assert(!regs.r2HasCond, "We would override our flag");
             regs.r2HasCond = true;
@@ -782,7 +796,7 @@ struct LightningGen
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto result_r = JIT_R2;
-        if (result == BCValue.init)
+        if (!result)
         {
             assert(!regs.r2HasCond, "We would override our flag");
             regs.r2HasCond = true;
@@ -809,7 +823,7 @@ struct LightningGen
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto result_r = JIT_R2;
-        if (result == BCValue.init)
+        if (!result)
         {
             assert(!regs.r2HasCond, "We would override our flag");
             regs.r2HasCond = true;
@@ -836,7 +850,7 @@ struct LightningGen
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto result_r = JIT_R2;
-        if (result == BCValue.init)
+        if (!result)
         {
             assert(!regs.r2HasCond, "We would override our flag");
             regs.r2HasCond = true;
@@ -862,7 +876,7 @@ struct LightningGen
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto result_r = JIT_R2;
-        if (result == BCValue.init)
+        if (!result)
         {
             assert(!regs.r2HasCond, "We would override our flag");
             regs.r2HasCond = true;
@@ -888,7 +902,7 @@ struct LightningGen
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto result_r = JIT_R2;
-        if (result == BCValue.init)
+        if (!result)
         {
             assert(!regs.r2HasCond, "We would override our flag");
             regs.r2HasCond = true;
@@ -914,7 +928,7 @@ struct LightningGen
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto result_r = JIT_R2;
-        if (result == BCValue.init)
+        if (!result)
         {
             assert(!regs.r2HasCond, "We would override our flag");
             regs.r2HasCond = true;
@@ -940,7 +954,7 @@ struct LightningGen
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto result_r = JIT_R2;
-        if (result == BCValue.init)
+        if (!result)
         {
             assert(!regs.r2HasCond, "We would override our flag");
             regs.r2HasCond = true;
@@ -966,7 +980,7 @@ struct LightningGen
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto result_r = JIT_R2;
-        if (result == BCValue.init)
+        if (!result)
         {
             assert(!regs.r2HasCond, "We would override our flag");
             regs.r2HasCond = true;
@@ -992,7 +1006,7 @@ struct LightningGen
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto result_r = JIT_R2;
-        if (result == BCValue.init)
+        if (!result)
         {
             assert(!regs.r2HasCond, "We would override our flag");
             regs.r2HasCond = true;
@@ -1018,7 +1032,8 @@ struct LightningGen
         auto lhs_r = getSingleRegister(lhs);
 
         auto res_r = getSingleRegister(result);
-        if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
+        auto commonType = commonTypeEnum(lhs.type.type, rhs.type.type);
+        if (!commonType.anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
             if (rhs.vType == BCValueType.Immediate)
             {
@@ -1032,7 +1047,7 @@ struct LightningGen
             }
         }
         else
-            assert (0, "only integers are supported right now");
+            assert (0, "only integers are supported right now ... not: " ~ commonType.enumToString());
         regs.markUnused(lhs_r);
     }
 
@@ -1042,7 +1057,7 @@ struct LightningGen
         auto lhs_r = getSingleRegister(lhs);
 
         auto res_r = getSingleRegister(result);
-        if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
+        if (!commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
             if (rhs.vType == BCValueType.Immediate)
             {
@@ -1065,7 +1080,7 @@ struct LightningGen
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto res_r = getSingleRegister(result);
-        if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
+        if (!commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
             if (rhs.vType == BCValueType.Immediate)
             {
@@ -1088,7 +1103,7 @@ struct LightningGen
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto res_r = getSingleRegister(result);
-        if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
+        if (!commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
             if (rhs.vType == BCValueType.Immediate)
             {
@@ -1111,7 +1126,7 @@ struct LightningGen
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto res_r = getSingleRegister(result);
-        if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
+        if (!commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
             if (rhs.vType == BCValueType.Immediate)
             {
@@ -1337,7 +1352,7 @@ struct LightningGen
             //const rIdx = regs.aquireTempReg(false);
             auto rIdx = 1;
             // hard_coded to r1 for now
-            assert(rIdx != INVALID_IDX, "Couldn't aquire TempReg");
+            assert(rIdx != 0, "Couldn't aquire TempReg");
             assert((rIdx >> 16) == 0, "I asked for an unpaired reg but got a paired one");
             assert(rIdx != 0, "r0 must not be used as TempReg");
 
