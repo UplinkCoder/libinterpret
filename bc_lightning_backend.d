@@ -68,7 +68,20 @@ struct RuntimeContext
     uint* heapSizeP;
     uint* stackSizeP;
 
-    enum stackAddrMask = ((1 << 31) | (1 << 30));
+    enum huge_stack = false;
+
+    static if (huge_stack)
+    {
+        // 1 GB Stack 3 GB Heap
+        enum stackAddrMask = ((1 << 31) | (1 << 30));
+    } else {
+        // 128 MB Stack 3.87 GB Heap
+        enum stackAddrMask = ((1 << 31) | 
+                              (1 << 30) | 
+                              (1 << 29) | 
+                              (1 << 28) | 
+                              (1 << 27));
+    }
     /// if the two most significant bits are both one it's on the stack
     static bool isPointerToStack(uint unrealPointer)
     {
@@ -91,6 +104,7 @@ struct RuntimeContext
 }
 
 alias register_index = uint;
+enum register_index INVALID_IDX = 0;
 
 enum ContextOffset
 {
@@ -123,18 +137,26 @@ bool isRegisterPair(register_index regIdx)
 
 bool NoRegister(register_index regIdx)
 {
-    return regIdx == uint.max;
+    return regIdx == 0;
 }
 
+static register_index reg2idx(jit_reg_t reg)
+{
+    assert(reg <= jit_v(0) && reg >= jit_v(jit_v_num()),
+        "register is not a valid v-reg: " ~ enumToString(reg));
+    return (reg  - jit_v(0)) + 1;
+}
+
+
+import std.file : append;
 struct RegisterState
 {
     enum nRegs = jit_v_num();
     enum nTempRegs = jit_r_num();
 
     BCValue[nRegs] valueInReg;
-    enum register_index invalid_idx = (0xFFFF | (0xFFFF << 16));
 
-    register_index[nRegs] pariedWith = invalid_idx;
+    register_index[nRegs] pairedWith = 0;
 
     register_index getRegisterIndex(BCValue v)
     {
@@ -142,7 +164,7 @@ struct RegisterState
         {
             if (valR == v)
             {
-                assert(pariedWith[i] == invalid_idx);
+                assert(pairedWith[i] == INVALID_IDX);
                 regStatus.markUsed(i);
                 return i;
             }
@@ -155,13 +177,15 @@ struct RegisterState
     /// if needed we evict a value
     register_index getSingleRegisterIndex(BCValue v)
     {
+        append("reg_alloc.log", cast(void[])("\nrequesting reg for: " ~ v.toString()));
         jit_reg_t result = JIT_NOREG;
 
         foreach(int i, valR;valueInReg)
         {
+            append("reg_alloc.log", cast(void[])("... found in regIdx: " ~ itos(i)));
             if (valR == v)
             {
-                assert(pariedWith[i] == invalid_idx);
+                assert(!pairedWith[i]);
                 regStatus.markUsed(i);
                 return i;
             }
@@ -182,25 +206,23 @@ struct RegisterState
 
     register_index allocReg(BCValue v, bool notPaired = false)
     {
-        register_index result;
+        register_index result = INVALID_IDX;
         with(regStatus)
         {
             // first let's look for a free register.
             register_index nextReg = nextFree();
             if (nextReg != INVALID_IDX)
             {
-                assert(pariedWith[nextReg] == invalid_idx);
+                assert(pairedWith[nextReg] == INVALID_IDX, "free register cannot have pairing relationships!");
                 // we have a free register let's use it
                 markUsed(nextReg);
                 valueInReg[nextReg] = v;
                 result = jit_v(nextReg);
-                sync_reg(v, result);
-                return result;
             }
             // no free register now we need to evict ... sigh
             // first let's look for someome marked for eviction
             register_index unusedReg = nextUnused();
-            if (unusedReg != INVALID_IDX)
+            if (result == INVALID_IDX && unusedReg != INVALID_IDX)
             {
                 // depending on wheter we need a register pair or not we have to do
                 // diffrent things here.
@@ -212,51 +234,55 @@ struct RegisterState
 
                 // we keep searching for a long as there are unused regs
                 // for one which is a single pair
-                auto pair_idx = pariedWith[unusedReg];
-                while (pair_idx != invalid_idx)
+                auto pair_idx = pairedWith[unusedReg];
+                while (pair_idx != INVALID_IDX)
                 {
                     masked &= (~(1 << unusedReg));
                     if (masked != 0)
                     {
                         import core.bitop : bsf;
                         unusedReg = bsf(masked);
-                        pair_idx = pariedWith[unusedReg];
+                        pair_idx = pairedWith[unusedReg];
                     }
                 }
                 // if we don't find one we split the last unused paired reg
-                if (pair_idx != invalid_idx)
+                if (pair_idx != INVALID_IDX)
                 {
                     // if our last canidate is paired we need to unpair it
                     // of course it's partner should also be unused.
-                    const idx1 = pair_idx & 0xFFFF;
-                    const idx2 = pair_idx >> 16;
+                    const idx1 = (pair_idx & 0xFFFF) - 1;
+                    const idx2 = (pair_idx >> 16) - 1;
                     assert(isUnused(idx1) && isUnused(idx2));
                     unpair(pair_idx);
                 }
                 markUsed(unusedReg);
-                valueInReg[unusedReg] = v;
-                result = jit_v(unusedReg);
-                sync_reg(v, result);
-                return result;
-            }
+            } else
             // we got no one marked for evication
             // well then we get a 'random' canidate and force evict
             {
                 auto nextEvict = nextEvictim();
-                const pair_idx = pariedWith[nextEvict];
+                const pair_idx = pairedWith[nextEvict];
                 result = jit_v(nextEvict);
-                sync_reg(valueInReg[nextEvict], result);
                 // we sync on eviction
                 // now we need to unpair if needed
-                if (pair_idx != invalid_idx)
+                if (pair_idx != INVALID_IDX)
                 {
                     unpair(pair_idx);
                 }
-                valueInReg[nextEvict] = v;
-                sync_reg(v, result);
-                return result;
+                else
+                {
+
+                }
             }
         }
+
+        assert(!regStatus.isDirty(result));
+        /// 
+        const low_idx = result & 0xFFFF;
+        valueInReg[low_idx] = v;
+        assert(result != INVALID_IDX);
+        read_stack(v, result);
+        return result;
     }
 
 
@@ -278,24 +304,23 @@ struct RegisterState
     }
 
     /// write the value in the register to the stack location it mirrors
-    void sync_pair(BCValue v, register_index reg)
+    void write_stack_pair(BCValue v, register_index reg)
     {
         assert(isRegisterPair(reg));
         assert(0, "Not Implemented");
     }
 
     /// write the value in the register to the stack location it mirrors
-    void sync_reg(BCValue v, register_index reg)
+    void write_stack(BCValue v, register_index reg)
     {
         if (isRegisterPair(reg))
         {
-            sync_pair(v, reg);
+            write_stack_pair(v, reg);
         }
         else
         {
             const idx = reg - jit_v(0);
             regStatus.markClean(reg);
-            assert(0, "Not implemented");
         }
     }
 
@@ -303,9 +328,9 @@ struct RegisterState
     /// mark this register as a canidate for eviction
     void markUnused(jit_reg_t reg)
     {
-        const idx = reg - jit_v(0);
-        const pair_idx = pariedWith[idx];
-        if (pair_idx != invalid_idx)
+        const idx = idxFromReg(reg);
+        const pair_idx = pairedWith[idx - 1];
+        if (pair_idx != 0)
         {
             const lw_idx = pair_idx & 0xFFFF;
             const hi_idx = pair_idx >> 16;
@@ -326,26 +351,27 @@ struct RegisterState
         if (regStatus.isDirty(idx))
         {
             const v = valueInReg[idx];
-            sync_reg(v, reg);
+            write_stack(v, reg);
         }
         regStatus.markFree(idx);
         valueInReg[idx] = BCValue.init;
     }
-
+    /// set two registers as paried
     void set_paired(jit_reg_t reg1, jit_reg_t reg2)
     {
         assert(regStatus.isUnused(reg1) && regStatus.isUnused(reg2));
-        assert(pariedWith[reg1] == invalid_idx &&
-               pariedWith[reg2] == invalid_idx);
+        assert(pairedWith[reg1] == INVALID_IDX &&
+               pairedWith[reg2] == INVALID_IDX);
         const idx1 = reg1 - jit_v(0);
         const idx2 = reg2 - jit_v(0);
 
         const pair_idx = (min(idx1, idx2) | (max(idx1, idx2) << 16));
 
-        pariedWith[idx1] = pair_idx;
-        pariedWith[idx2] = pair_idx;
+        pairedWith[idx1] = pair_idx;
+        pairedWith[idx2] = pair_idx;
     }
 
+    /// writes the pair to stack and unpairs and frees the regs
     void unpair(register_index idx)
     {
         assert(isRegisterPair(idx));
@@ -354,19 +380,22 @@ struct RegisterState
         // the lower of the pair always has the value
 
         auto v = valueInReg[lw_idx];
-        sync_pair(v, idx);
+        write_stack_pair(v, idx);
         const hi_idx = idx >> 16;
 
-        pariedWith[lw_idx] = invalid_idx;
-        pariedWith[hi_idx] = invalid_idx;
+        pairedWith[lw_idx] = INVALID_IDX;
+        pairedWith[hi_idx] = INVALID_IDX;
+
+        regStatus.markFree(lw_idx);
+        regStatus.markFree(hi_idx);
     }
 
     register_index get_index(jit_reg_t reg)
     {
         assert(reg >= jit_v(0) && reg < jit_v(jit_v_num()));
         const idx = reg - jit_v(0);
-        const pair_idx = pariedWith[idx];
-        if (pair_idx != invalid_idx)
+        const pair_idx = pairedWith[idx];
+        if (pair_idx != INVALID_IDX)
         {
             return pair_idx;
         }
@@ -929,7 +958,7 @@ struct LightningGen
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = regs.getSingleRegister(lhs);
-        regs.sync_reg(lhs, lhs_r);
+        regs.read_stack(lhs, lhs_r);
 
         auto res_r = regs.getSingleRegister(result);
         if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
@@ -954,7 +983,7 @@ struct LightningGen
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = regs.getSingleRegister(lhs);
-        regs.sync_reg(lhs, lhs_r);
+        regs.read_stack(lhs, lhs_r);
         auto res_r = regs.getSingleRegister(result);
         if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
@@ -972,14 +1001,12 @@ struct LightningGen
         else
             assert (0, "only integers are supported right now");
         regs.markUnused(lhs_r);
-        regs.sync_reg(result, res_r);
     }
 
     void Mul3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = regs.getSingleRegister(lhs);
-        regs.sync_reg(lhs, lhs_r);
         auto res_r = regs.getSingleRegister(result);
         if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
@@ -997,14 +1024,12 @@ struct LightningGen
         else
             assert (0, "only integers are supported right now");
         regs.markUnused(lhs_r);
-        regs.sync_reg(result, res_r);
     }
 
     void Div3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = regs.getSingleRegister(lhs);
-        regs.sync_reg(lhs, lhs_r);
         auto res_r = regs.getSingleRegister(result);
         if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
@@ -1022,14 +1047,12 @@ struct LightningGen
         else
             assert (0, "only integers are supported right now");
         regs.markUnused(lhs_r);
-        regs.sync_reg(result, res_r);
-    }
+     }
 
     void Udiv3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = regs.getSingleRegister(lhs);
-        regs.sync_reg(lhs, lhs_r);
         auto res_r = regs.getSingleRegister(result);
         if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
@@ -1047,14 +1070,12 @@ struct LightningGen
         else
             assert (0, "only integers are supported right now");
         regs.markUnused(lhs_r);
-        regs.sync_reg(result, res_r);
     }
 
     void And3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = regs.getSingleRegister(lhs);
-        regs.sync_reg(lhs, lhs_r);
         auto res_r = regs.getSingleRegister(result);
         if (commonTypeEnum(lhs.type.type, rhs.type.type) == BCTypeEnum.i32)
         {
@@ -1072,7 +1093,6 @@ struct LightningGen
         else
             assert (0, "only 32 bit integers are supported right now");
         regs.markUnused(lhs_r);
-        regs.sync_reg(result, res_r);
     }
     void Or3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
     void Xor3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
@@ -1216,7 +1236,6 @@ struct LightningGen
         load_size_t_immoffset(JIT_R1, JIT_R0, heapDataPtrOffset);
 
         _jit_new_node_www(_jit, jit_code_t.jit_code_ldxr_i, to_r, from_r, JIT_R2);
-        regs.sync_reg(to, to_r);
     }
     void Store32(BCValue to, BCValue from) { assert(0, "Not Implemented yet"); }
     void Load64(BCValue to, BCValue from) { assert(0, "Not Implemented yet"); }
@@ -1259,7 +1278,7 @@ struct LightningGen
         if (line != lastLine)
         {
             const rIdx = regs.aquireTempReg(false);
-            assert(rIdx != regs.invalid_idx, "Couldn't aquire TempReg");
+            assert(rIdx != regs.INVALID_IDX, "Couldn't aquire TempReg");
             assert((rIdx >> 16) == 0, "I asked for an unpaired reg but got a paired one");
             assert(rIdx != 0, "r0 must not be used as TempReg");
 

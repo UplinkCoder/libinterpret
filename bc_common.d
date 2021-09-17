@@ -370,8 +370,8 @@ struct RegStatusList(int STATIC_NREGS)
         import core.bitop : bsf;
         
         uint result = INVALID_IDX;
-        if (freeBitfield)
-            result = bsf(freeBitfield);
+        if (freeBitfield != 0)
+            result = bsf(freeBitfield) + 1;
         return result;
     }
     
@@ -382,7 +382,7 @@ struct RegStatusList(int STATIC_NREGS)
         
         uint result = INVALID_IDX;
         if (unusedBitfield)
-            result = bsf(unusedBitfield);
+            result = bsf(unusedBitfield) + 1;
         return result;
     }
     
@@ -393,7 +393,7 @@ struct RegStatusList(int STATIC_NREGS)
         
         uint result = INVALID_IDX;
         if (dirtyBitfield)
-            result = bsf(dirtyBitfield);
+            result = bsf(dirtyBitfield) + 1;
         return result;
     }
     
@@ -409,53 +409,60 @@ struct RegStatusList(int STATIC_NREGS)
     void markFree(int regIdx)
     {
         pragma(inline, true);
-        assert(regIdx < NREGS);
-        freeBitfield |= (1 << regIdx);
+        assert(regIdx && regIdx <= NREGS);
+        freeBitfield |= (1 << (regIdx - 1));
     }
     
     /// mark register as eviction canidate
     void markUnused(int regIdx)
     {
         pragma(inline, true);
-        assert(regIdx < NREGS);
-        unusedBitfield |= (1 << regIdx);
+        assert(regIdx && regIdx <= NREGS);
+        unusedBitfield |= (1 << (regIdx - 1));
     }
     
     /// mark register as used
     void markUsed(int regIdx)
     {
         pragma(inline, true);
-        assert(regIdx < NREGS);
-        freeBitfield &= ~(1 << regIdx);
-        unusedBitfield &= ~(1 << regIdx);
+        assert(regIdx && regIdx <= NREGS);
+        freeBitfield &= ~(1 << (regIdx - 1));
+        unusedBitfield &= ~(1 << (regIdx - 1));
     }
     
     void markClean(int regIdx)
     {
         pragma(inline, true);
-        assert(regIdx < NREGS);
-        dirtyBitfield &= ~(1 << regIdx);
+        assert(regIdx && regIdx <= NREGS);
+        dirtyBitfield &= ~(1 << (regIdx - 1));
     }
     
     void markDirty(int regIdx)
     {
         pragma(inline, true);
-        assert(regIdx < NREGS);
-        dirtyBitfield |= (1 << regIdx);
+        assert(regIdx && regIdx <= NREGS);
+        dirtyBitfield |= (1 << (regIdx - 1));
     }
 
     bool isDirty(int regIdx)
     {
         pragma(inline, true);
-        assert(regIdx < NREGS);
-        return (dirtyBitfield & (1 << regIdx)) != 0;
+        assert(regIdx && regIdx <= NREGS);
+        return (dirtyBitfield & (1 << (regIdx - 1))) != 0;
     }
 
     bool isUnused(int regIdx)
     {
         pragma(inline, true);
-        assert(regIdx < NREGS);
-        return (freeBitfield & (1 << regIdx)) != 0;
+        assert(regIdx && regIdx <= NREGS);
+        return (unusedBitfield & (1 << (regIdx - 1))) != 0;
+    }
+
+    bool isFree(int regIdx)
+    {
+        pragma(inline, true);
+        assert(regIdx && regIdx <= NREGS);
+        return (freeBitfield & (1 << (regIdx - 1))) != 0;
     }
 }
 
@@ -464,7 +471,7 @@ static assert(()
     {
         enum INVALID_IDX = uint.max;
         RegStatusList!16 f;
-
+        
         assert(f.n_free == 16);
         assert(f.nextDirty() == INVALID_IDX);
         assert(f.nextUnused() == INVALID_IDX);
@@ -475,7 +482,7 @@ static assert(()
         assert(f.nextDirty() == nextReg);
         f.markClean(nextReg);
         assert(f.nextDirty() == INVALID_IDX);
-        foreach(r; 0 .. 16)
+        foreach(r; 1 .. 17)
             f.markUnused(r);
         foreach(r; 0 .. 16)
         {
@@ -549,10 +556,11 @@ const(ubyte) toParamCode(const BCValue val) pure @safe @nogc
 }
 
 enum heapSizeOffset = BCHeap.init.heapSize.offsetof;
-enum heapMaxOffset =  BCHeap.init.heapMax.offsetof;
+enum heapMaxOffset = BCHeap.init.heapMax.offsetof;
 enum heapDataOffset = BCHeap.init.heapData.offsetof;
-enum heapDataLengthOffset = heapDataOffset + 0;             /*[].length.offsetof;*/
-enum heapDataPtrOffset =    heapDataOffset + size_t.sizeof; /*[].ptr.offsetof;*/
+
+enum heapDataLengthOffset = heapDataOffset + 0; // should really be [].length.offsetof
+enum heapDataPtrOffset = heapDataOffset + size_t.sizeof;  // should be [].ptr.offsetof        
 
 struct BCHeap
 {
