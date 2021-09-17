@@ -58,10 +58,15 @@ struct RuntimeContext
     uint currentLine;
     const(char)* currentFile;
 
+    int framePointer;
+    int stackPointer;
 
-    long* stackDataBegin;
+    int* stackDataBegin;
+    uint* stackDataLength;
+
     ubyte* heapDataBegin;
     uint* heapDataLength;
+    // bc function to be determined.
     void* functions;
 
     //
@@ -118,11 +123,16 @@ enum ContextOffset
     currentLine = RuntimeContext.init.currentLine.offsetof,
     currentFile = RuntimeContext.init.currentFile.offsetof,
 
+    framePointer = RuntimeContext.init.stackDataBegin.offsetof,
+    stackPointer = RuntimeContext.init.stackDataBegin.offsetof,
+
     stackDataBegin = RuntimeContext.init.stackDataBegin.offsetof,
     heapDataBegin = RuntimeContext.init.heapDataBegin.offsetof,
     heapDataLength = RuntimeContext.init.functions.offsetof,
     functions = RuntimeContext.init.functions.offsetof,
+
     heapSizeP = RuntimeContext.init.heapSizeP.offsetof,
+    stackSizeP = RuntimeContext.init.stackSizeP.offsetof,
 }
 
 pure nothrow @safe @nogc
@@ -154,45 +164,11 @@ struct RegisterState
     enum nRegs = jit_v_num();
     enum nTempRegs = jit_r_num();
 
-    BCValue[nRegs] valueInReg;
+
+    /// frame of the value offset which is currently held by this register
+    ushort[nRegs] frameOffsetInReg = 0;
 
     register_index[nRegs] pairedWith = 0;
-
-    register_index getRegisterIndex(BCValue v)
-    {
-        foreach(int i, valR;valueInReg)
-        {
-            if (valR == v)
-            {
-                assert(pairedWith[i] == INVALID_IDX);
-                regStatus.markUsed(i);
-                return i;
-            }
-        }
-        return allocReg(v);
-    }
-    /// get a register for a stack value
-    /// either we already have it in a register
-    /// or we allocate a register for it
-    /// if needed we evict a value
-    register_index getSingleRegisterIndex(BCValue v)
-    {
-        append("reg_alloc.log", cast(void[])("\nrequesting reg for: " ~ v.toString()));
-        jit_reg_t result = JIT_NOREG;
-
-        foreach(int i, valR;valueInReg)
-        {
-            append("reg_alloc.log", cast(void[])("... found in regIdx: " ~ itos(i)));
-            if (valR == v)
-            {
-                assert(!pairedWith[i]);
-                regStatus.markUsed(i);
-                return i;
-            }
-        }
-
-        return allocReg(v, true);
-    }
 
     register_index aquireTempReg(bool paired)
     {
@@ -204,158 +180,7 @@ struct RegisterState
         assert(0, "TODO implement me.");
     }
 
-    register_index allocReg(BCValue v, bool notPaired = false)
-    {
-        register_index result = INVALID_IDX;
-        with(regStatus)
-        {
-            // first let's look for a free register.
-            register_index nextReg = nextFree();
-            if (nextReg != INVALID_IDX)
-            {
-                assert(pairedWith[nextReg] == INVALID_IDX, "free register cannot have pairing relationships!");
-                // we have a free register let's use it
-                markUsed(nextReg);
-                valueInReg[nextReg] = v;
-                result = jit_v(nextReg);
-            }
-            // no free register now we need to evict ... sigh
-            // first let's look for someome marked for eviction
-            register_index unusedReg = nextUnused();
-            if (result == INVALID_IDX && unusedReg != INVALID_IDX)
-            {
-                // depending on wheter we need a register pair or not we have to do
-                // diffrent things here.
 
-                // if the unused reg was part of a register pair
-                // let's see if we can find a single one
-                // for easier searching lets start with a while loop right away
-                typeof(unusedBitfield) masked = unusedBitfield;
-
-                // we keep searching for a long as there are unused regs
-                // for one which is a single pair
-                auto pair_idx = pairedWith[unusedReg];
-                while (pair_idx != INVALID_IDX)
-                {
-                    masked &= (~(1 << unusedReg));
-                    if (masked != 0)
-                    {
-                        import core.bitop : bsf;
-                        unusedReg = bsf(masked);
-                        pair_idx = pairedWith[unusedReg];
-                    }
-                }
-                // if we don't find one we split the last unused paired reg
-                if (pair_idx != INVALID_IDX)
-                {
-                    // if our last canidate is paired we need to unpair it
-                    // of course it's partner should also be unused.
-                    const idx1 = (pair_idx & 0xFFFF) - 1;
-                    const idx2 = (pair_idx >> 16) - 1;
-                    assert(isUnused(idx1) && isUnused(idx2));
-                    unpair(pair_idx);
-                }
-                markUsed(unusedReg);
-            } else
-            // we got no one marked for evication
-            // well then we get a 'random' canidate and force evict
-            {
-                auto nextEvict = nextEvictim();
-                const pair_idx = pairedWith[nextEvict];
-                result = jit_v(nextEvict);
-                // we sync on eviction
-                // now we need to unpair if needed
-                if (pair_idx != INVALID_IDX)
-                {
-                    unpair(pair_idx);
-                }
-                else
-                {
-
-                }
-            }
-        }
-
-        assert(!regStatus.isDirty(result));
-        /// 
-        const low_idx = result & 0xFFFF;
-        valueInReg[low_idx] = v;
-        assert(result != INVALID_IDX);
-        read_stack(v, result);
-        return result;
-    }
-
-
-    // calls get register index and verfies it's not a register pair
-    jit_reg_t getSingleRegister(BCValue v)
-    {
-        if (basicTypeSize(v.type.type) <= 4)
-        {
-            const iReg =
-                cast(int)(getSingleRegisterIndex(v));
-            assert(iReg < jit_v_num() && iReg >= 0);
-            return jit_v(iReg);
-        }
-        else
-        {
-            // return JIT_NOREG;
-            assert(0);
-        }
-    }
-
-    /// write the value in the register to the stack location it mirrors
-    void write_stack_pair(BCValue v, register_index reg)
-    {
-        assert(isRegisterPair(reg));
-        assert(0, "Not Implemented");
-    }
-
-    /// write the value in the register to the stack location it mirrors
-    void write_stack(BCValue v, register_index reg)
-    {
-        if (isRegisterPair(reg))
-        {
-            write_stack_pair(v, reg);
-        }
-        else
-        {
-            const idx = reg - jit_v(0);
-            regStatus.markClean(reg);
-        }
-    }
-
-    /// value in register is unlikely to be used again
-    /// mark this register as a canidate for eviction
-    void markUnused(jit_reg_t reg)
-    {
-        const idx = idxFromReg(reg);
-        const pair_idx = pairedWith[idx - 1];
-        if (pair_idx != 0)
-        {
-            const lw_idx = pair_idx & 0xFFFF;
-            const hi_idx = pair_idx >> 16;
-
-            regStatus.markUsed(lw_idx);
-            regStatus.markUsed(hi_idx);
-        }
-        else
-        {
-            regStatus.markUnused(idx);
-        }
-    }
-
-    /// evict the value from the register
-    void freeReg(jit_reg_t reg)
-    {
-        const idx = reg - jit_v(0);
-        if (regStatus.isDirty(idx))
-        {
-            const v = valueInReg[idx];
-            write_stack(v, reg);
-        }
-        regStatus.markFree(idx);
-        valueInReg[idx] = BCValue.init;
-    }
     /// set two registers as paried
     void set_paired(jit_reg_t reg1, jit_reg_t reg2)
     {
@@ -371,23 +196,24 @@ struct RegisterState
         pairedWith[idx2] = pair_idx;
     }
 
-    /// writes the pair to stack and unpairs and frees the regs
-    void unpair(register_index idx)
+    /// value in register is unlikely to be used again
+    /// mark this register as a canidate for eviction
+    void markUnused(jit_reg_t reg)
     {
-        assert(isRegisterPair(idx));
-        //before we unpair we need to sync.
-        const lw_idx = idx & 0xFFFF;
-        // the lower of the pair always has the value
+        const idx = reg2idx(reg);
+        const pair_idx = pairedWith[idx - 1];
+        if (pair_idx != 0)
+        {
+            const lw_idx = pair_idx & 0xFFFF;
+            const hi_idx = pair_idx >> 16;
 
-        auto v = valueInReg[lw_idx];
-        write_stack_pair(v, idx);
-        const hi_idx = idx >> 16;
-
-        pairedWith[lw_idx] = INVALID_IDX;
-        pairedWith[hi_idx] = INVALID_IDX;
-
-        regStatus.markFree(lw_idx);
-        regStatus.markFree(hi_idx);
+            regStatus.markUsed(lw_idx);
+            regStatus.markUsed(hi_idx);
+        }
+        else
+        {
+            regStatus.markUnused(idx);
+        }
     }
 
     register_index get_index(jit_reg_t reg)
@@ -415,7 +241,7 @@ struct RegisterState
         return evictionCounter++ % nRegs;
     }
     bool[nTempRegs] spilled;
-    bool r0HasCond;
+    bool r2HasCond;
 }
 
 struct LightningGen
@@ -478,6 +304,246 @@ struct LightningGen
         void** functions
     );
 
+
+    // --------- Register Management Helpers ---------------
+
+
+    register_index getRegisterIndex(BCValue v)
+    {
+        foreach(int i, frameOffset;regs.frameOffsetInReg)
+        {
+            if (frameOffset == v.stackAddr)
+            {
+                assert(regs.pairedWith[i] == INVALID_IDX);
+                regs.regStatus.markUsed(i);
+                return i;
+            }
+        }
+        return allocReg(v.stackAddr);
+    }
+    /// get a register for a stack value
+    /// either we already have it in a register
+    /// or we allocate a register for it
+    /// if needed we evict a value
+    register_index getSingleRegisterIndex(BCValue v)
+    {
+        append("reg_alloc.log", cast(void[])("\nrequesting reg for: " ~ v.toString()));
+
+        foreach(int i, frameOffset;regs.frameOffsetInReg)
+        {
+            if (frameOffset == v.stackAddr)
+            {
+                append("reg_alloc.log", cast(void[])("... found in regIdx: " ~ itos(i)));
+                
+                assert(!regs.pairedWith[i]);
+                regs.regStatus.markUsed(i);
+                return i + 1;
+            }
+        }
+        
+        return allocReg(v.stackAddr, true);
+    }
+
+
+    // calls get register index and verfies it's not a register pair
+    jit_reg_t getSingleRegister(BCValue v)
+    {
+        if (basicTypeSize(v.type.type) <= 4)
+        {
+            const iReg =
+                cast(int)(getSingleRegisterIndex(v));
+            assert(iReg < jit_v_num() && iReg >= 0);
+            return jit_v(iReg);
+        }
+        else
+        {
+            // return JIT_NOREG;
+            assert(0);
+        }
+    }
+    
+    /// must not be called by the backend proper!
+    /// writes the value of a register back into the stack location it mirrors
+    /// only happens when stack values are evicted or on calls when we have to flush the registers
+    void write_stack(ushort fOffset, register_index reg)
+    {
+        assert(reg);
+        _jit_getarg_ptrint(jit_r(0), context_arg);
+        const framePointerReg = jit_r(1);
+        // load fp into framePointer reg
+        load_size_t_immoffset(framePointerReg, jit_r(0), ContextOffset.framePointer);
+        
+        // low part of the register index is always valid
+        const low_idx = (reg & 0xffff);
+        assert(regs.regStatus.isDirty(low_idx));
+        
+        jit_reg_t r1 = jit_v(low_idx - 1);
+        // load the frameOffset from the frame pointer into r1
+        _jit_new_node_www(_jit, jit_code_t.jit_code_stxr_i, fOffset, framePointerReg, r1);
+        regs.regStatus.markClean(low_idx);
+        
+        if (const high_idx = (reg >> 16))
+        {
+            assert(regs.regStatus.isDirty(high_idx));
+            jit_reg_t r2 = jit_v(high_idx - 1);
+            _jit_new_node_www(_jit, jit_code_t.jit_code_stxr_i, fOffset + 4, framePointerReg, r1);
+            regs.regStatus.markClean(high_idx);
+        }
+    }
+
+    /// must not be called by the backend proper!
+    /// reads a stack value into a register ... this only happens on allocation
+    void read_stack(ushort fOffset, register_index reg)
+    {
+        assert(reg);
+        _jit_getarg_ptrint(jit_r(0), context_arg);
+        const framePointerReg = jit_r(1);
+        // load fp into framePointer reg
+        load_size_t_immoffset(framePointerReg, jit_r(0), ContextOffset.framePointer);
+
+        // low part of the register index is always valid
+        const low_idx = (reg & 0xffff);
+        assert(!regs.regStatus.isDirty(low_idx));
+
+        jit_reg_t r1 = jit_v(low_idx - 1);
+        // load the frameOffset from the frame pointer into r1
+        _jit_new_node_www(_jit, jit_code_t.jit_code_ldxr_i, r1, framePointerReg, fOffset);
+
+
+        if (const high_idx = (reg >> 16))
+        {
+            assert(!regs.regStatus.isDirty(high_idx));
+            jit_reg_t r2 = jit_v(high_idx - 1);
+            _jit_new_node_www(_jit, jit_code_t.jit_code_ldxr_i, r2, framePointerReg, fOffset + 4);
+        }
+    }
+
+    register_index allocReg(ushort fOffset, bool notPaired = false)
+    {
+        register_index result = INVALID_IDX;
+        with(regs) with(regStatus)
+        {
+            // first let's look for a free register.
+            register_index nextReg = nextFree();
+            if (nextReg != INVALID_IDX)
+            {
+                assert(pairedWith[nextReg] == INVALID_IDX, "free register cannot have pairing relationships!");
+                // we have a free register let's use it
+                regs.regStatus.markUsed(nextReg);
+                frameOffsetInReg[nextReg] = fOffset;
+                result = jit_v(nextReg);
+            }
+            // no free register now we need to evict ... sigh
+            // first let's look for someome marked for eviction
+            register_index unusedReg = nextUnused();
+            if (result == INVALID_IDX && unusedReg != INVALID_IDX)
+            {
+                // depending on wheter we need a register pair or not we have to do
+                // diffrent things here.
+                
+                // if the unused reg was part of a register pair
+                // let's see if we can find a single one
+                // for easier searching lets start with a while loop right away
+                typeof(unusedBitfield) masked = unusedBitfield;
+                
+                // we keep searching for a long as there are unused regs
+                // for one which is a single pair
+                auto pair_idx = pairedWith[unusedReg];
+                while (pair_idx != INVALID_IDX)
+                {
+                    masked &= (~(1 << unusedReg));
+                    if (masked != 0)
+                    {
+                        import core.bitop : bsf;
+                        unusedReg = bsf(masked);
+                        pair_idx = pairedWith[unusedReg];
+                    }
+                }
+                // if we don't find one we split the last unused paired reg
+                if (pair_idx != INVALID_IDX)
+                {
+                    // if our last canidate is paired we need to unpair it
+                    // of course it's partner should also be unused.
+                    const idx1 = (pair_idx & 0xFFFF) - 1;
+                    const idx2 = (pair_idx >> 16) - 1;
+                    assert(isUnused(idx1) && isUnused(idx2));
+                    unpair(pair_idx);
+                }
+                markUsed(unusedReg);
+            } else
+                // we got no one marked for evication
+                // well then we get a 'random' canidate and force evict
+            {
+                auto nextEvict = nextEvictim();
+                const pair_idx = pairedWith[nextEvict];
+                result = jit_v(nextEvict);
+                // we sync on eviction
+                // now we need to unpair if needed
+                if (pair_idx != INVALID_IDX)
+                {
+                    unpair(pair_idx);
+                }
+                else
+                {
+                    
+                }
+            }
+
+            assert(!regs.regStatus.isDirty(result));
+            /// 
+            const low_idx = result & 0xFFFF;
+            frameOffsetInReg[low_idx] = fOffset;
+            assert(result != INVALID_IDX);
+            read_stack(fOffset, result);
+
+        }
+        
+        return result;
+    }
+
+    /// writes the pair to stack and unpairs and frees the regs
+    void unpair(register_index idx)
+    {
+        assert(isRegisterPair(idx));
+        //before we unpair we need to sync.
+        const lw_idx = idx & 0xFFFF;
+        // the lower of the pair always has the value
+        
+        auto fOffset = regs.frameOffsetInReg[lw_idx];
+        write_stack(fOffset, idx);
+        const hi_idx = idx >> 16;
+        
+        regs.pairedWith[lw_idx] = INVALID_IDX;
+        regs.pairedWith[hi_idx] = INVALID_IDX;
+        
+        regs.regStatus.markFree(lw_idx);
+        regs.regStatus.markFree(hi_idx);
+    }
+
+    /// evict the value from the register
+    void freeReg(jit_reg_t reg)
+    {
+        const idx = reg - jit_v(0);
+        if (regs.regStatus.isDirty(idx))
+        {
+            const v = regs.frameOffsetInReg[idx];
+            write_stack(v, reg);
+        }
+        regs.regStatus.markFree(idx);
+        regs.frameOffsetInReg[idx] = 0;
+    }
+
+
+    // ---------- backend proper ----------
+
+    extern (C) void _jit_getarg_ptrint(jit_reg_t r, jit_node_t* arg)
+    {
+        version(_64bit)
+            _jit_getarg_l(_jit, r, arg); // git it as 64bit
+        else
+            _jit_getarg_i(_jit, r, arg); // get it as 32bit int
+    }
+
     void Initialize()
     {
         // make sure jit state is initalized;
@@ -501,14 +567,6 @@ struct LightningGen
     typeof(_jit_arg(cast(jit_state_t*)null)) context_arg;
 
     bool insideFunction = false;
-
-    extern (C) void _jit_getarg_ptrint(jit_reg_t r, jit_node_t* arg)
-    {
-        version(_64bit)
-            _jit_getarg_l(_jit, r, arg); // git it as 64bit
-        else
-            _jit_getarg_i(_jit, r, arg); // get it as 32bit int
-    }
 
     void beginFunction(uint f = 0, void* fnDecl = null)
     {
@@ -629,14 +687,14 @@ struct LightningGen
     /// BCValue.init is special and means jmp based upon the last condition flag
     CndJmpBegin beginCndJmp(BCValue cond = BCValue.init, bool ifTrue = false)
     {
-        auto flagReg = JIT_R0;
+        auto flagReg = JIT_R2;
         if (cond == BCValue.init)
         {
-            assert(regs.r0HasCond);
+            assert(regs.r2HasCond);
         }
         else
         {
-            flagReg = regs.getSingleRegister(cond);
+            flagReg = getSingleRegister(cond);
         }
 
         jit_node* at;
@@ -679,14 +737,14 @@ struct LightningGen
     void Set(BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
+        auto lhs_r = getSingleRegister(lhs);
         if (rhs.vType == BCValueType.Immediate)
         {
             _jit_new_node_ww(_jit, jit_code_t.jit_code_movi, lhs_r, rhs.imm32.imm32);
         }
         else
         {
-            auto rhs_r = regs.getSingleRegister(rhs);
+            auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_ww(_jit, jit_code_t.jit_code_movr, lhs_r, rhs_r);
             regs.markUnused(rhs_r);
         }
@@ -695,16 +753,16 @@ struct LightningGen
     void Ult3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto result_r = JIT_R0;
+        auto lhs_r = getSingleRegister(lhs);
+        auto result_r = JIT_R2;
         if (result == BCValue.init)
         {
-            assert(!regs.r0HasCond, "We would override our flag");
-            regs.r0HasCond = true;
+            assert(!regs.r2HasCond, "We would override our flag");
+            regs.r2HasCond = true;
         }
         else
         {
-            result_r = regs.getSingleRegister(result);
+            result_r = getSingleRegister(result);
         }
 
         if (rhs.vType == BCValueType.Immediate)
@@ -713,7 +771,7 @@ struct LightningGen
         }
         else
         {
-            auto rhs_r = regs.getSingleRegister(rhs);
+            auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_ltr_u, result_r, lhs_r, rhs_r);
             regs.markUnused(rhs_r);
         }
@@ -722,16 +780,16 @@ struct LightningGen
     void Ugt3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto result_r = JIT_R0;
+        auto lhs_r = getSingleRegister(lhs);
+        auto result_r = JIT_R2;
         if (result == BCValue.init)
         {
-            assert(!regs.r0HasCond, "We would override our flag");
-            regs.r0HasCond = true;
+            assert(!regs.r2HasCond, "We would override our flag");
+            regs.r2HasCond = true;
         }
         else
         {
-            result_r = regs.getSingleRegister(result);
+            result_r = getSingleRegister(result);
         }
         
         if (rhs.vType == BCValueType.Immediate)
@@ -740,7 +798,7 @@ struct LightningGen
         }
         else
         {
-            auto rhs_r = regs.getSingleRegister(rhs);
+            auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_gtr_u, result_r, lhs_r, rhs_r);
             regs.markUnused(rhs_r);
         }
@@ -749,16 +807,16 @@ struct LightningGen
     void Ule3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto result_r = JIT_R0;
+        auto lhs_r = getSingleRegister(lhs);
+        auto result_r = JIT_R2;
         if (result == BCValue.init)
         {
-            assert(!regs.r0HasCond, "We would override our flag");
-            regs.r0HasCond = true;
+            assert(!regs.r2HasCond, "We would override our flag");
+            regs.r2HasCond = true;
         }
         else
         {
-            result_r = regs.getSingleRegister(result);
+            result_r = getSingleRegister(result);
         }
         
         if (rhs.vType == BCValueType.Immediate)
@@ -767,7 +825,7 @@ struct LightningGen
         }
         else
         {
-            auto rhs_r = regs.getSingleRegister(rhs);
+            auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_ler_u, result_r, lhs_r, rhs_r);
             regs.markUnused(rhs_r);
         }
@@ -776,16 +834,16 @@ struct LightningGen
     void Uge3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto result_r = JIT_R0;
+        auto lhs_r = getSingleRegister(lhs);
+        auto result_r = JIT_R2;
         if (result == BCValue.init)
         {
-            assert(!regs.r0HasCond, "We would override our flag");
-            regs.r0HasCond = true;
+            assert(!regs.r2HasCond, "We would override our flag");
+            regs.r2HasCond = true;
         }
         else
         {
-            result_r = regs.getSingleRegister(result);
+            result_r = getSingleRegister(result);
         }
         
         if (rhs.vType == BCValueType.Immediate)
@@ -794,7 +852,7 @@ struct LightningGen
         }
         else
         {
-            auto rhs_r = regs.getSingleRegister(rhs);
+            auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_ger_u, result_r, lhs_r, rhs_r);
         }
     }
@@ -802,16 +860,16 @@ struct LightningGen
     void Lt3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto result_r = JIT_R0;
+        auto lhs_r = getSingleRegister(lhs);
+        auto result_r = JIT_R2;
         if (result == BCValue.init)
         {
-            assert(!regs.r0HasCond, "We would override our flag");
-            regs.r0HasCond = true;
+            assert(!regs.r2HasCond, "We would override our flag");
+            regs.r2HasCond = true;
         }
         else
         {
-            result_r = regs.getSingleRegister(result);
+            result_r = getSingleRegister(result);
         }
 
         if (rhs.vType == BCValueType.Immediate)
@@ -820,7 +878,7 @@ struct LightningGen
         }
         else
         {
-            auto rhs_r = regs.getSingleRegister(rhs);
+            auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_ltr, result_r, lhs_r, rhs_r);
         }
     }
@@ -828,16 +886,16 @@ struct LightningGen
     void Gt3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto result_r = JIT_R0;
+        auto lhs_r = getSingleRegister(lhs);
+        auto result_r = JIT_R2;
         if (result == BCValue.init)
         {
-            assert(!regs.r0HasCond, "We would override our flag");
-            regs.r0HasCond = true;
+            assert(!regs.r2HasCond, "We would override our flag");
+            regs.r2HasCond = true;
         }
         else
         {
-            result_r = regs.getSingleRegister(result);
+            result_r = getSingleRegister(result);
         }
         
         if (rhs.vType == BCValueType.Immediate)
@@ -846,7 +904,7 @@ struct LightningGen
         }
         else
         {
-            auto rhs_r = regs.getSingleRegister(rhs);
+            auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_gtr, result_r, lhs_r, rhs_r);
         }
     }
@@ -854,16 +912,16 @@ struct LightningGen
     void Le3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto result_r = JIT_R0;
+        auto lhs_r = getSingleRegister(lhs);
+        auto result_r = JIT_R2;
         if (result == BCValue.init)
         {
-            assert(!regs.r0HasCond, "We would override our flag");
-            regs.r0HasCond = true;
+            assert(!regs.r2HasCond, "We would override our flag");
+            regs.r2HasCond = true;
         }
         else
         {
-            result_r = regs.getSingleRegister(result);
+            result_r = getSingleRegister(result);
         }
         
         if (rhs.vType == BCValueType.Immediate)
@@ -872,7 +930,7 @@ struct LightningGen
         }
         else
         {
-            auto rhs_r = regs.getSingleRegister(rhs);
+            auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_ler, result_r, lhs_r, rhs_r);
         }
     }
@@ -880,16 +938,16 @@ struct LightningGen
     void Ge3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto result_r = JIT_R0;
+        auto lhs_r = getSingleRegister(lhs);
+        auto result_r = JIT_R2;
         if (result == BCValue.init)
         {
-            assert(!regs.r0HasCond, "We would override our flag");
-            regs.r0HasCond = true;
+            assert(!regs.r2HasCond, "We would override our flag");
+            regs.r2HasCond = true;
         }
         else
         {
-            result_r = regs.getSingleRegister(result);
+            result_r = getSingleRegister(result);
         }
         
         if (rhs.vType == BCValueType.Immediate)
@@ -898,7 +956,7 @@ struct LightningGen
         }
         else
         {
-            auto rhs_r = regs.getSingleRegister(rhs);
+            auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_ger, result_r, lhs_r, rhs_r);
         }
     }
@@ -906,16 +964,16 @@ struct LightningGen
     void Eq3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto result_r = JIT_R0;
+        auto lhs_r = getSingleRegister(lhs);
+        auto result_r = JIT_R2;
         if (result == BCValue.init)
         {
-            assert(!regs.r0HasCond, "We would override our flag");
-            regs.r0HasCond = true;
+            assert(!regs.r2HasCond, "We would override our flag");
+            regs.r2HasCond = true;
         }
         else
         {
-            result_r = regs.getSingleRegister(result);
+            result_r = getSingleRegister(result);
         }
         
         if (rhs.vType == BCValueType.Immediate)
@@ -924,7 +982,7 @@ struct LightningGen
         }
         else
         {
-            auto rhs_r = regs.getSingleRegister(rhs);
+            auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_eqr, result_r, lhs_r, rhs_r);
         }
     }
@@ -932,16 +990,16 @@ struct LightningGen
     void Neq3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto result_r = JIT_R0;
+        auto lhs_r = getSingleRegister(lhs);
+        auto result_r = JIT_R2;
         if (result == BCValue.init)
         {
-            assert(!regs.r0HasCond, "We would override our flag");
-            regs.r0HasCond = true;
+            assert(!regs.r2HasCond, "We would override our flag");
+            regs.r2HasCond = true;
         }
         else
         {
-            result_r = regs.getSingleRegister(result);
+            result_r = getSingleRegister(result);
         }
         
         if (rhs.vType == BCValueType.Immediate)
@@ -950,17 +1008,16 @@ struct LightningGen
         }
         else
         {
-            auto rhs_r = regs.getSingleRegister(rhs);
+            auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_ner, result_r, lhs_r, rhs_r);
         }
     }
     void Add3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        regs.read_stack(lhs, lhs_r);
+        auto lhs_r = getSingleRegister(lhs);
 
-        auto res_r = regs.getSingleRegister(result);
+        auto res_r = getSingleRegister(result);
         if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
             if (rhs.vType == BCValueType.Immediate)
@@ -969,7 +1026,7 @@ struct LightningGen
             }
             else
             {
-                auto rhs_r = regs.getSingleRegister(rhs);
+                auto rhs_r = getSingleRegister(rhs);
                 _jit_new_node_www(_jit, jit_code_t.jit_code_addr, res_r, lhs_r, rhs_r);
                 regs.markUnused(rhs_r);
             }
@@ -982,9 +1039,9 @@ struct LightningGen
     void Sub3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        regs.read_stack(lhs, lhs_r);
-        auto res_r = regs.getSingleRegister(result);
+        auto lhs_r = getSingleRegister(lhs);
+
+        auto res_r = getSingleRegister(result);
         if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
             if (rhs.vType == BCValueType.Immediate)
@@ -993,7 +1050,7 @@ struct LightningGen
             }
             else
             {
-                auto rhs_r = regs.getSingleRegister(rhs);
+                auto rhs_r = getSingleRegister(rhs);
                 _jit_new_node_www(_jit, jit_code_t.jit_code_subr, res_r, lhs_r, rhs_r);
                 regs.markUnused(rhs_r);
             }
@@ -1006,8 +1063,8 @@ struct LightningGen
     void Mul3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto res_r = regs.getSingleRegister(result);
+        auto lhs_r = getSingleRegister(lhs);
+        auto res_r = getSingleRegister(result);
         if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
             if (rhs.vType == BCValueType.Immediate)
@@ -1016,7 +1073,7 @@ struct LightningGen
             }
             else
             {
-                auto rhs_r = regs.getSingleRegister(rhs);
+                auto rhs_r = getSingleRegister(rhs);
                 _jit_new_node_www(_jit, jit_code_t.jit_code_mulr, res_r, lhs_r, rhs_r);
                 regs.markUnused(rhs_r);
             }
@@ -1029,8 +1086,8 @@ struct LightningGen
     void Div3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto res_r = regs.getSingleRegister(result);
+        auto lhs_r = getSingleRegister(lhs);
+        auto res_r = getSingleRegister(result);
         if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
             if (rhs.vType == BCValueType.Immediate)
@@ -1039,7 +1096,7 @@ struct LightningGen
             }
             else
             {
-                auto rhs_r = regs.getSingleRegister(rhs);
+                auto rhs_r = getSingleRegister(rhs);
                 _jit_new_node_www(_jit, jit_code_t.jit_code_divr, res_r, lhs_r, rhs_r);
                 regs.markUnused(rhs_r);
             }
@@ -1052,8 +1109,8 @@ struct LightningGen
     void Udiv3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto res_r = regs.getSingleRegister(result);
+        auto lhs_r = getSingleRegister(lhs);
+        auto res_r = getSingleRegister(result);
         if (commonTypeEnum(lhs.type.type, rhs.type.type).anyOf([BCTypeEnum.f23, BCTypeEnum.f52]))
         {
             if (rhs.vType == BCValueType.Immediate)
@@ -1062,7 +1119,7 @@ struct LightningGen
             }
             else
             {
-                auto rhs_r = regs.getSingleRegister(rhs);
+                auto rhs_r = getSingleRegister(rhs);
                 _jit_new_node_www(_jit, jit_code_t.jit_code_divr_u, res_r, lhs_r, rhs_r);
                 regs.markUnused(rhs_r);
             }
@@ -1075,8 +1132,8 @@ struct LightningGen
     void And3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(basicTypeSize(lhs.type.type) <= 4);
-        auto lhs_r = regs.getSingleRegister(lhs);
-        auto res_r = regs.getSingleRegister(result);
+        auto lhs_r = getSingleRegister(lhs);
+        auto res_r = getSingleRegister(result);
         if (commonTypeEnum(lhs.type.type, rhs.type.type) == BCTypeEnum.i32)
         {
             if (rhs.vType == BCValueType.Immediate)
@@ -1085,7 +1142,7 @@ struct LightningGen
             }
             else
             {
-                auto rhs_r = regs.getSingleRegister(rhs);
+                auto rhs_r = getSingleRegister(rhs);
                 _jit_new_node_www(_jit, jit_code_t.jit_code_andr, res_r, lhs_r, rhs_r);
                 regs.markUnused(rhs_r);
             }
@@ -1220,11 +1277,11 @@ struct LightningGen
 
     void Load32(BCValue to, BCValue from)
     {
-        auto from_r = regs.getSingleRegister(from);
+        auto from_r = getSingleRegister(from);
         // this is the address we want to load from
-        auto to_r = regs.getSingleRegister(to);
+        auto to_r = getSingleRegister(to);
         // this is the stack address we want to load into
-        assert(!regs.r0HasCond);
+        assert(!regs.r2HasCond);
 
         _jit_getarg_ptrint(JIT_R0, context_arg);
         static if (1)
@@ -1276,17 +1333,20 @@ struct LightningGen
     void Line(uint line)
     {
         if (line != lastLine)
-        {
-            const rIdx = regs.aquireTempReg(false);
-            assert(rIdx != regs.INVALID_IDX, "Couldn't aquire TempReg");
+        { 
+            //const rIdx = regs.aquireTempReg(false);
+            auto rIdx = 1;
+            // hard_coded to r1 for now
+            assert(rIdx != INVALID_IDX, "Couldn't aquire TempReg");
             assert((rIdx >> 16) == 0, "I asked for an unpaired reg but got a paired one");
             assert(rIdx != 0, "r0 must not be used as TempReg");
 
             const r = jit_r(rIdx);
 
             loadImm32(r, line);
+            _jit_getarg_ptrint(jit_r(0), context_arg);
             storeToContext32(r, ContextOffset.currentLine, jit_r(0));
-            regs.releaseTempReg(r);
+            //regs.releaseTempReg(r);
         }
     }
     void File(string filename) { assert(0, "Not Implemented yet"); }
