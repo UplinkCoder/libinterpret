@@ -408,15 +408,16 @@ struct LightningGen
 
         jit_reg_t r1 = jit_v(low_idx - 1);
         // load the frameOffset from the frame pointer into r1
-        _jit_new_node_www(_jit, jit_code_t.jit_code_ldxr_i, r1, framePointerReg, fOffset);
+        _jit_new_node_www(_jit, jit_code_t.jit_code_ldxi_i, r1, framePointerReg, fOffset);
 
 
         if (const high_idx = (reg >> 16))
         {
             assert(!regs.regStatus.isDirty(high_idx));
             jit_reg_t r2 = jit_v(high_idx - 1);
-            _jit_new_node_www(_jit, jit_code_t.jit_code_ldxr_i, r2, framePointerReg, fOffset + 4);
+            _jit_new_node_www(_jit, jit_code_t.jit_code_ldxi_i, r2, framePointerReg, fOffset + 4);
         }
+        _jit_note(_jit, __FILE__.ptr, __LINE__);
     }
 
     register_index allocReg(ushort fOffset, bool wantPair = false)
@@ -1218,14 +1219,17 @@ struct LightningGen
 
     jit_node_t* load_size_t_immoffset(jit_reg_t to_r, jit_reg_t from_r, int offset)
     {
+        _jit_note(_jit, __FILE__.ptr, __LINE__);
         version(_64bit)
         {
-            return _jit_new_node_www(_jit, jit_code_t.jit_code_ldxr_l, to_r, from_r, offset);
+            return _jit_new_node_www(_jit, jit_code_t.jit_code_ldxi_l, to_r, from_r, offset);
         }
         else
         {
-            return _jit_new_node_www(_jit, jit_code_t.jit_code_ldxr_i, to_r, from_r, offset);
+            return _jit_new_node_www(_jit, jit_code_t.jit_code_ldxi_i, to_r, from_r, offset);
         }
+        scope(exit)
+            _jit_note(_jit, __FILE__.ptr, __LINE__);
     }
 
     extern (C) void RT_BoundsCheck(RuntimeContext* context)
