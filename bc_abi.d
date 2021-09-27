@@ -2,10 +2,49 @@
 /// sizes and offsets are in Bytes
 
 module dmd.ctfe.bc_abi;
-import dmd.ctfe.bc_common;
+
 import dmd.ctfe.bc_limits;
+import dmd.ctfe.bc_common;
+
 
 enum PtrSize = 4;
+
+enum stackAddrMask = ((1 << 31) |
+                      (1 << 30) |
+                      (1 << 29));
+
+static bool isStackAddress(uint unrealPointer)
+{
+    pragma(inline, true);
+    // a stack address has the upper 3 bits set
+    return (unrealPointer & stackAddrMask) == stackAddrMask;
+}
+
+static bool isHeapAddress (uint unrealPointer)
+{
+    pragma(inline, true);
+    // a heap address does not have the upper 3 bits set
+    return (unrealPointer & stackAddrMask) != stackAddrMask;
+}
+
+static uint toStackOffset(uint unrealPointer)
+{
+    assert(isStackAddress(unrealPointer));
+    return (unrealPointer & ~stackAddrMask);
+}
+
+enum maxHeapAddress =  0b1101_1111_1111_1111_1111_1111_1111_1111;
+enum minHeapAddress =  0b0000_0000_0000_0000_0000_0000_0000_0000;
+
+enum minStackAddress = 0b1110_0000_0000_0000_0000_0000_0000_0000;
+enum maxStackAddress = 0b1111_1111_1111_1111_1111_1111_1111_1111;
+
+static assert(isStackAddress(uint.max - ushort.max));
+static assert(!isStackAddress(int.max));
+static assert(isHeapAddress(maxHeapAddress));
+static assert(!isHeapAddress(minStackAddress));
+static assert(!isHeapAddress(minStackAddress));
+static assert(!isStackAddress(!maxHeapAddress));
 
 bool needsUserSize(BCTypeEnum type)
 {
@@ -61,3 +100,4 @@ struct DelegateDescriptor
     enum ContextPtrOffset = 4;
     enum Size = 8;
 }
+

@@ -75,18 +75,9 @@ struct RuntimeContext
 
     enum huge_stack = false;
 
-    static if (huge_stack)
-    {
-        // 1 GB Stack 3 GB Heap
-        enum stackAddrMask = ((1 << 31) | (1 << 30));
-    } else {
-        // 128 MB Stack 3.87 GB Heap
-        enum stackAddrMask = ((1 << 31) | 
-                              (1 << 30) | 
-                              (1 << 29) | 
-                              (1 << 28) | 
-                              (1 << 27));
-    }
+    // 0.5 GB Stack 3.5 GB Heap
+    enum stackAddrMask = ((1 << 31) | (1 << 30) | (1 << 29));
+
     /// if the two most significant bits are both one it's on the stack
     static bool isPointerToStack(uint unrealPointer)
     {
@@ -113,10 +104,13 @@ alias register_index = uint;
 enum ContextOffset
 {
     rSpill = RuntimeContext.init.rSpill.offsetof,
+
     rtArg0 = RuntimeContext.init.rtArg0.offsetof,
-    rtLongArg0 = RuntimeContext.init.rtLongArg0.offsetof,
     rtArg1 = RuntimeContext.init.rtArg1.offsetof,
+    rtLongArg0 = RuntimeContext.init.rtLongArg0.offsetof,
+
     rtArg2 = RuntimeContext.init.rtArg2.offsetof,
+    rtArg3 = RuntimeContext.init.rtArg3.offsetof,
     rtLongArg1 = RuntimeContext.init.rtLongArg1.offsetof,
 
     currentLine = RuntimeContext.init.currentLine.offsetof,
@@ -243,6 +237,28 @@ struct RegisterState
     bool r2HasCond;
 }
 
+bool isInRegisterRange(jit_reg_t r, jit_reg_t beg, jit_reg_t end)
+{
+    bool result = true;
+    if (r < beg && r > end)
+        return result = false;
+    
+    return result;
+}
+
+jit_reg_t LowReg(register_index Idx)
+{
+    assert(isRegisterPair(Idx));
+    return cast(jit_reg_t) ((Idx & 0xFFFF) - 1);
+}
+
+jit_reg_t HighReg(register_index Idx)
+{
+    assert(isRegisterPair(Idx));
+    return cast(jit_reg_t) ((Idx >> 16) - 1);
+}
+
+
 struct LightningGen
 {
     jit_state* _jit;
@@ -307,26 +323,15 @@ struct LightningGen
     // --------- Register Management Helpers ---------------
 
 
-    register_index getRegisterIndex(BCValue v)
-    {
-        foreach(int i, frameOffset;regs.frameOffsetInReg)
-        {
-            if (frameOffset == v.stackAddr)
-            {
-                assert(regs.pairedWith[i] == 0);
-                regs.regStatus.markUsed(i + 1);
-                return i + 1;
-            }
-        }
-        return allocReg(v.stackAddr);
-    }
     /// get a register for a stack value
     /// either we already have it in a register
     /// or we allocate a register for it
     /// if needed we evict a value
-    register_index getSingleRegisterIndex(BCValue v)
+    register_index getRegisterIndex(BCValue v)
     {
         assert(v);
+        assert(v.vType != BCValueType.Immediate);
+
         append("reg_alloc.log", cast(void[])("\nrequesting reg for: " ~ v.toString()));
 
         foreach(int i, frameOffset;regs.frameOffsetInReg)
@@ -351,7 +356,7 @@ struct LightningGen
         if (basicTypeSize(v.type.type) <= 4)
         {
             const iReg =
-                cast(int)(getSingleRegisterIndex(v));
+                cast(int)(getRegisterIndex(v));
             assert(iReg <= jit_v_num() && iReg > 0);
             return jit_v(iReg - 1);
         }
@@ -361,7 +366,28 @@ struct LightningGen
             assert(0, "we should never have gotten here, value doesn't fit into a single reg");
         }
     }
-    
+
+    register_index getPairedRegisterIndex(BCValue v)
+    {
+        if (basicTypeSize(v.type.type) == 8)
+        {
+            const RegIdx =
+                cast(int)(getRegisterIndex(v));
+            assert (isRegisterPair(RegIdx));
+            assert(isInRegisterRange(LowReg(RegIdx), jit_v(0), jit_v(jit_v_num() - 1)));
+            assert(isInRegisterRange(HighReg(RegIdx), jit_v(1), jit_v(jit_v_num())));
+            return RegIdx;
+            // assert(iReg <= jit_v_num() && iReg > 0);
+            // return jit_v(iReg - 1);
+        }
+        else
+        {
+            // return JIT_NOREG;
+            assert(0, "we should never have gotten here, value doesn't fit into a single reg");
+        }
+    }
+
+
     /// must not be called by the backend proper!
     /// writes the value of a register back into the stack location it mirrors
     /// only happens when stack values are evicted or on calls when we have to flush the registers
@@ -374,11 +400,12 @@ struct LightningGen
         // load fp into framePointer reg
         load_size_t_immoffset(framePointerReg, jit_r(0), ContextOffset.framePointer);
         
-        // low part of the register index is always valid
         const low_idx = (reg & 0xffff);
+        // low part of the register index is always valid
+        assert(low_idx);
         assert(regs.regStatus.isDirty(low_idx));
         
-        jit_reg_t r1 = jit_v(low_idx - 1);
+        jit_reg_t r1 = LowReg(low_idx);
         // load the frameOffset from the frame pointer into r1
         _jit_new_node_www(_jit, jit_code_t.jit_code_stxr_i, fOffset, framePointerReg, r1);
         regs.regStatus.markClean(low_idx);
@@ -400,6 +427,7 @@ struct LightningGen
         _jit_getarg_ptrint(jit_r(0), context_arg);
         const framePointerReg = jit_r(1);
         // load fp into framePointer reg
+        _jit_note(_jit, __FILE__.ptr, __LINE__);
         load_size_t_immoffset(framePointerReg, jit_r(0), ContextOffset.framePointer);
 
         // low part of the register index is always valid
@@ -476,9 +504,8 @@ struct LightningGen
                 {
                     if (regs.regStatus.isDirty(unusedReg))
                     {
-                        const reg = jit_v(unusedReg - 1);
                         const syncWithOffset = frameOffsetInReg[result - 1];
-                        write_stack(syncWithOffset, reg);
+                        write_stack(syncWithOffset, unusedReg);
                     }
                 }
 
@@ -498,9 +525,11 @@ struct LightningGen
                 }
                 else
                 {
-                    const reg = jit_v(result - 1);
-                    const syncWithOffset = frameOffsetInReg[result - 1];
-                    write_stack(syncWithOffset, reg);
+                    if (regs.regStatus.isDirty(result))
+                    {
+                        const syncWithOffset = frameOffsetInReg[result - 1];
+                        write_stack(syncWithOffset, result);
+                    }
                 }
             }
 
@@ -551,12 +580,13 @@ struct LightningGen
 
     // ---------- backend proper ----------
 
-    extern (C) void _jit_getarg_ptrint(jit_reg_t r, jit_node_t* arg)
+    extern (C) void _jit_getarg_ptrint(jit_reg_t r, jit_node_t* arg, int line = __LINE__)
     {
         version(_64bit)
             _jit_getarg_l(_jit, r, arg); // git it as 64bit
         else
             _jit_getarg_i(_jit, r, arg); // get it as 32bit int
+        // _jit_note(_jit, "getarg".ptr, line);
     }
 
     void Initialize()
@@ -588,21 +618,24 @@ struct LightningGen
     {
         functionCount++;
         auto fIdx = f;
-        assert(currentFrameOffset == 0, "by the time we have call beginFunction either we are freshly initalized or have called endFunction before");
-        assert(0, "Not properly implemented yet");
+        // assert(currentFrameOffset == 0, "by the time we have call beginFunction either we are freshly initalized or have called endFunction before");
+        // assert(0, "Not properly implemented yet");
         _jit_prolog(_jit);
 
+        _jit_note(_jit, __FILE__.ptr, __LINE__);
+        _jit_name(_jit, "context_arg".ptr);
         context_arg = _jit_arg(_jit); // RuntimeContext*
+        _jit_note(_jit, __FILE__.ptr, __LINE__);
     }
 
     void endFunction()
     {
         _jit_epilog(_jit);
-        currentFrameOffset = 0;
+        currentFrameOffset = 4;
         locationCount = 0;
         parameterCount = 0;
 
-        assert(0, "Not properly implemented yet");
+        //assert(0, "Not properly implemented yet");
     }
 
     BCLabel genLabel()
@@ -649,12 +682,12 @@ struct LightningGen
         return tmp;
     }
 
-    void destroyTemporary(BCType bct, uint userSize = 0)
+    void destroyTemporary(BCValue v, uint userSize = 0)
     {
-        assert(!needsUserSize(bct.type) || userSize > 0);
-        auto stackSize = (typeIsPointerOnStack(bct.type) ? PtrSize :  basicTypeSize(bct.type));
+        assert(!needsUserSize(v.type.type) || userSize > 0);
+        auto stackSize = (typeIsPointerOnStack(v.type.type) ? PtrSize :  basicTypeSize(v.type.type));
 
-        if (needsUserSize(bct.type))
+        if (needsUserSize(v.type.type))
         {
             stackSize = userSize;
         }
@@ -664,6 +697,7 @@ struct LightningGen
 
     BCValue genLocal(BCType bct, string name, uint userSize = 0)
     {
+        _jit_note(_jit, __FILE__.ptr, __LINE__);
         assert(!needsUserSize(bct.type) || userSize > 0);
         ++localCount;
         auto localIdx = localCount;
@@ -900,6 +934,7 @@ struct LightningGen
 
     void Gt3(BCValue result, BCValue lhs, BCValue rhs)
     {
+        _jit_note(_jit, __FILE__.ptr, __LINE__);
         assert(basicTypeSize(lhs.type.type) <= 4);
         auto lhs_r = getSingleRegister(lhs);
         auto result_r = JIT_R2;
@@ -922,6 +957,7 @@ struct LightningGen
             auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_gtr, result_r, lhs_r, rhs_r);
         }
+        _jit_note(_jit, __FILE__.ptr, __LINE__);
     }
 
     void Le3(BCValue result, BCValue lhs, BCValue rhs)
@@ -1180,6 +1216,7 @@ struct LightningGen
         if (fn.vType == BCValueType.Immediate)
         {
             _jit_new_node_ww(_jit, jit_code_t.jit_code_movi, JIT_R1, fn.imm32.imm32);
+            _jit_prepare(_jit);
             _jit_finishr(_jit, JIT_R1);
         }
     }
@@ -1232,12 +1269,15 @@ struct LightningGen
             _jit_note(_jit, __FILE__.ptr, __LINE__);
     }
 
-    extern (C) void RT_BoundsCheck(RuntimeContext* context)
+    extern (C) uint RT_BoundsCheck(RuntimeContext* context)
     {
         auto SliceDescPtr = context.rtArg0;
         auto Index = context.rtArg1;
         SliceDescriptor desc = *(cast(SliceDescriptor*)context.toRealPointer(SliceDescPtr));
+        import core.stdc.stdio;
+        printf("doing a bounds check for idx %d\n", Index);
 
+        return 0;
     }
 
     extern (C) uint RT_NullPtrCheck(RuntimeContext* context)
@@ -1313,8 +1353,68 @@ struct LightningGen
 
         _jit_new_node_www(_jit, jit_code_t.jit_code_ldxr_i, to_r, from_r, JIT_R2);
     }
-    void Store32(BCValue to, BCValue from) { assert(0, "Not Implemented yet"); }
-    void Load64(BCValue to, BCValue from) { assert(0, "Not Implemented yet"); }
+    void Store32(BCValue to, BCValue from)
+    {
+        BCValue tmp;
+        BCValue tmp2;
+        if (from.vType == BCValueType.Immediate)
+        {
+            tmp = genTemporary(i32Type);
+            Set(tmp, from);
+            from = tmp;
+        }
+
+        if (to.vType == BCValueType.Immediate)
+        {
+            tmp2 = genTemporary(i32Type);
+            Set(tmp2, to);
+            to = tmp2;
+        }
+
+        auto to_r = getSingleRegister(to);
+        // this is the address we want to store to
+        auto from_r = getSingleRegister(from);
+        // this is the stack address we want to store into it
+        _jit_getarg_ptrint(JIT_R0, context_arg);
+        // get the ctx to load the heap ptr from
+        load_size_t_immoffset(JIT_R1, JIT_R0, ContextOffset.heapDataBegin);
+        // R1 is now the heapPtr
+/+
+        import core.stdc.stdio;
+        _jit_prepare(_jit);
+        _jit_pushargi(_jit, cast(jit_word_t)(cast(void*)"to_r: %d\n".ptr));
+        _jit_ellipsis(_jit);
+        _jit_pushargr(_jit, to_r);
+        _jit_finishi(_jit, cast(void*)&printf);
++/
+        _jit_new_node_www(_jit, jit_code_t.jit_code_stxr_i, JIT_R1, to_r, from_r);
+
+        // now do the store
+    }
+    void Load64(BCValue to, BCValue from)
+    {
+        auto from_r = getSingleRegister(from);
+        // this is the address we want to load from
+        auto to_idx = getPairedRegisterIndex(to);
+        // this is the stack address we want to load into
+        assert(!regs.r2HasCond);
+        
+        _jit_getarg_ptrint(JIT_R0, context_arg);
+        static if (1)
+        {
+            nullptr_check(from_r);
+            load_size_t_immoffset(JIT_R2, JIT_R0, heapDataLengthOffset);
+            heapoverflow_check(from_r, JIT_R2, JIT_R0);
+        }
+        load_size_t_immoffset(JIT_R1, JIT_R0, heapDataPtrOffset);
+        
+        _jit_new_node_www(_jit, jit_code_t.jit_code_ldxr_i, LowReg(to_idx), from_r, JIT_R2);
+
+        // load high part.
+        _jit_new_node_www(_jit, jit_code_t.jit_code_addi, jit_r(2), jit_r(2), 4);
+
+        _jit_new_node_www(_jit, jit_code_t.jit_code_ldxr_i, HighReg(to_idx), from_r, JIT_R2);
+    }
     void Store64(BCValue to, BCValue from) { assert(0, "Not Implemented yet"); }
     void Alloc(BCValue heapPtr, BCValue size) { assert(0, "Not Implemented yet"); }
     void Not(BCValue result, BCValue val) { assert(0, "Not Implemented yet"); }
@@ -1335,7 +1435,7 @@ struct LightningGen
             // regular 4 byte return uses R1 for the value and R0 for the runtime return type
 
         }
-        assert(0, "TODO implement this");
+        //assert(0, "TODO implement this");
         _jit_ret(_jit);
     }
     void Cat(BCValue result, BCValue lhs, BCValue rhs, const uint elmSize) { assert(0, "Not Implemented yet"); }

@@ -6,6 +6,8 @@ import dmd.ctfe.fpconv_ctfe;
 /// calling them is equivlent to an expensive nop
 /// this is true for direct and indirect calls
 enum skipFn = uint.max;
+enum nodeFromName = uint.max - 1;
+enum currentScope = uint.max - 2;
 
 struct CndJmpBegin
 {
@@ -225,7 +227,7 @@ const(uint) basicTypeSize(const BCTypeEnum bct) @safe pure
         }
 
 
-    case Void, Array, Slice, Struct, Class:
+    case Void, Array, Slice, Struct, Class, AArray:
         {
             return 0;
         }
@@ -256,7 +258,8 @@ bool isFloat(BCType bct) @safe pure nothrow
 bool isBasicBCType(BCType bct) @safe pure
 {
     return !(bct.type == BCTypeEnum.Struct || bct.type == BCTypeEnum.Array || bct.type == BCTypeEnum.Class
-            || bct.type == BCTypeEnum.Slice || bct.type == BCTypeEnum.Undef || bct.type == BCTypeEnum.Ptr);
+            || bct.type == BCTypeEnum.Slice || bct.type == BCTypeEnum.Undef || bct.type == BCTypeEnum.Ptr
+            || bct.type == BCTypeEnum.AArray);
 }
 
 const(bool) isStackValueOrParameter(const BCValue val) pure @safe nothrow
@@ -302,6 +305,7 @@ enum BCTypeEnum : ubyte
 
     //  everything below here is not used by the bc layer.
     Array,
+    AArray,
     Struct,
     Class,
     Ptr,
@@ -362,14 +366,12 @@ struct RegStatusList(int STATIC_NREGS)
     uint unusedBitfield = 0;
     uint dirtyBitfield = 0;
     
-    enum INVALID_IDX = uint.max;
-    
     uint nextFree()
     {
         pragma(inline, true);
         import core.bitop : bsf;
         
-        uint result = INVALID_IDX;
+        uint result = 0;
         if (freeBitfield != 0)
             result = bsf(freeBitfield) + 1;
         return result;
@@ -380,7 +382,7 @@ struct RegStatusList(int STATIC_NREGS)
         pragma(inline, true);
         import core.bitop : bsf;
         
-        uint result = INVALID_IDX;
+        uint result = 0;
         if (unusedBitfield)
             result = bsf(unusedBitfield) + 1;
         return result;
@@ -391,7 +393,7 @@ struct RegStatusList(int STATIC_NREGS)
         pragma(inline, true);
         import core.bitop : bsf;
         
-        uint result = INVALID_IDX;
+        uint result = 0;
         if (dirtyBitfield)
             result = bsf(dirtyBitfield) + 1;
         return result;
@@ -469,19 +471,18 @@ struct RegStatusList(int STATIC_NREGS)
 
 static assert(()
     {
-        enum INVALID_IDX = uint.max;
         RegStatusList!16 f;
         
         assert(f.n_free == 16);
-        assert(f.nextDirty() == INVALID_IDX);
-        assert(f.nextUnused() == INVALID_IDX);
+        assert(f.nextDirty() == 0);
+        assert(f.nextUnused() == 0);
         auto nextReg = f.nextFree();
         f.markUsed(nextReg);
         assert(f.n_free == 15);
         f.markDirty(nextReg);
         assert(f.nextDirty() == nextReg);
         f.markClean(nextReg);
-        assert(f.nextDirty() == INVALID_IDX);
+        assert(f.nextDirty() == 0);
         foreach(r; 1 .. 17)
             f.markUnused(r);
         foreach(r; 0 .. 16)
@@ -489,7 +490,7 @@ static assert(()
             auto nextUnused = f.nextUnused();
             f.markUsed(nextUnused);
         }
-        assert(f.nextUnused() == INVALID_IDX);
+        assert(f.nextUnused() == 0);
 
         RegStatusList!0 d = RegStatusList!0(2);
         assert(d.n_free() == 2);
@@ -786,7 +787,18 @@ struct BCValue
     }
 
     //TODO PERF minor: use a 32bit value for heapRef;
-    BCHeapRef heapRef;
+    BCHeapRef heapRef_;
+
+    BCHeapRef heapRef(int line = __LINE__)
+    {
+        debug { import core.stdc.stdio; printf("heapRefGet from: %d\n", line); }
+        return heapRef_;
+    }
+    void heapRef(BCHeapRef v, int line = __LINE__)
+    {
+        debug { import core.stdc.stdio; printf("heapRefSet from: %d\n", line); }
+        heapRef_ = v;
+    }
     string name;
 
     uint toUint() const pure
