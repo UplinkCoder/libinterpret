@@ -787,18 +787,7 @@ struct BCValue
     }
 
     //TODO PERF minor: use a 32bit value for heapRef;
-    BCHeapRef heapRef_;
-
-    BCHeapRef heapRef(int line = __LINE__)
-    {
-        debug { import core.stdc.stdio; printf("heapRefGet from: %d\n", line); }
-        return heapRef_;
-    }
-    void heapRef(BCHeapRef v, int line = __LINE__)
-    {
-        debug { import core.stdc.stdio; printf("heapRefSet from: %d\n", line); }
-        heapRef_ = v;
-    }
+    BCHeapRef heapRef;
     string name;
 
     uint toUint() const pure

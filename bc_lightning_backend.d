@@ -128,6 +128,9 @@ enum ContextOffset
     stackSizeP = RuntimeContext.init.stackSizeP.offsetof,
 }
 
+pragma(msg, "framePtrOffset: ", ContextOffset.framePointer);
+pragma(msg, "stackPtrOffset: ", ContextOffset.stackPointer);
+
 pure nothrow @safe @nogc
 int min(int x, int y) { pragma(inline, true); return (((x) < (y)) ? (x) : (y)); }
 pure nothrow @safe @nogc
@@ -135,7 +138,7 @@ int max(int x, int y) { pragma(inline, true); return (((x) > (y)) ? (x) : (y)); 
 
 bool isRegisterPair(register_index regIdx)
 {
-    return (regIdx & 0xffff) != 0;
+    return (regIdx & ~0xffff) != 0;
 }
 
 bool NoRegister(register_index regIdx)
@@ -154,7 +157,7 @@ static register_index reg2idx(jit_reg_t reg)
 import std.file : append;
 struct RegisterState
 {
-    enum nRegs = jit_v_num();
+    enum nRegs = jit_v_num() - 1;
     enum nTempRegs = jit_r_num();
 
 
@@ -249,13 +252,13 @@ bool isInRegisterRange(jit_reg_t r, jit_reg_t beg, jit_reg_t end)
 jit_reg_t LowReg(register_index Idx)
 {
     assert(isRegisterPair(Idx));
-    return cast(jit_reg_t) ((Idx & 0xFFFF) - 1);
+    return jit_v((Idx & 0xFFFF) - 1);
 }
 
 jit_reg_t HighReg(register_index Idx)
 {
     assert(isRegisterPair(Idx));
-    return cast(jit_reg_t) ((Idx >> 16) - 1);
+    return jit_v((Idx >> 16) - 1);
 }
 
 
@@ -338,7 +341,7 @@ struct LightningGen
         {
             if (frameOffset == v.stackAddr)
             {
-                append("reg_alloc.log", cast(void[])("... found in regIdx: " ~ itos(i)) ~"\n");
+                append("reg_alloc.log", cast(void[])("... found in regIdx: " ~ itos(i + 1)) ~"\n");
                 
                 assert(!regs.pairedWith[i]);
                 regs.regStatus.markUsed(i + 1);
@@ -393,51 +396,99 @@ struct LightningGen
     /// only happens when stack values are evicted or on calls when we have to flush the registers
     void write_stack(ushort fOffset, register_index reg)
     {
+
+        append("reg_alloc.log", "Writing  regIdx: " ~ itos(reg) ~ " into offset " ~ itos(fOffset) ~ "\n");
         assert(reg);
-        assert(regs.regStatus.isDirty(reg & 0xFFFF), "syncing a non dirtied register");
+
+        const low_idx = (reg & 0xffff);
+        assert(low_idx);
+        assert(regs.regStatus.isDirty(low_idx), "syncing a non dirtied register");
         _jit_getarg_ptrint(jit_r(0), context_arg);
         const framePointerReg = jit_r(1);
         // load fp into framePointer reg
         load_size_t_immoffset(framePointerReg, jit_r(0), ContextOffset.framePointer);
         
-        const low_idx = (reg & 0xffff);
         // low part of the register index is always valid
-        assert(low_idx);
+
         assert(regs.regStatus.isDirty(low_idx));
         
-        jit_reg_t r1 = LowReg(low_idx);
+        jit_reg_t r1 = jit_v(low_idx - 1);
         // load the frameOffset from the frame pointer into r1
-        _jit_new_node_www(_jit, jit_code_t.jit_code_stxr_i, fOffset, framePointerReg, r1);
+        _jit_name(_jit, "write_stack low Idx");
+        //printReg(r1, "value to be written to stack");
+        _jit_new_node_www(_jit, jit_code_t.jit_code_stxi_i, fOffset, framePointerReg, r1);
         regs.regStatus.markClean(low_idx);
         
         if (const high_idx = (reg >> 16))
         {
             assert(regs.regStatus.isDirty(high_idx));
             jit_reg_t r2 = jit_v(high_idx - 1);
-            _jit_new_node_www(_jit, jit_code_t.jit_code_stxr_i, fOffset + 4, framePointerReg, r1);
+            _jit_new_node_www(_jit, jit_code_t.jit_code_stxi_i, fOffset + 4, framePointerReg, r2);
             regs.regStatus.markClean(high_idx);
         }
+    }
+
+    void clearR0()
+    {
+        _jit_name(_jit, "clear R0".ptr);
+        _jit_new_node_ww(_jit, jit_code_t.jit_code_xorr, jit_r(0), jit_r(0));
+    }
+
+    void printReg(jit_reg_t r, const(char)* msg)
+    {
+        bool isTempReg = isInRegisterRange(r, jit_r(0), jit_r(jit_r_num()));
+        assert(!isTempReg, "The temp registers cannot be printed: " ~ "r0:" ~ itos(jit_r(0)) ~ " r:"  ~itos(r));
+
+        spill_to_context();
+        scope(exit) unspill_from_context();
+
+        // now we need to clear our r0 reg otherwise someone might write into your ctx ... how dare they!
+        clearR0();
+
+        import core.stdc.stdio;
+        _jit_prepare(_jit);
+        _jit_pushargi(_jit, cast(jit_word_t)(cast(void*)"%s reg: %p\n".ptr));
+        _jit_ellipsis(_jit);
+        _jit_pushargi(_jit, cast(jit_word_t) msg);
+        _jit_pushargr(_jit, r);
+        _jit_finishi(_jit, cast(void*)&printf);
+
+    }
+
+    void jit_halt()
+    {
+        static hlt()
+        {
+            asm {
+                int 3; 
+            }
+        }
+        _jit_new_node_w(_jit, jit_code_t.jit_code_calli, cast(jit_word_t)&hlt);
     }
 
     /// must not be called by the backend proper!
     /// reads a stack value into a register ... this only happens on allocation
     void read_stack(ushort fOffset, register_index reg)
     {
+        append("reg_alloc.log", "Reading offset" ~ itos(fOffset) ~ "into regIdx: " ~ itos(reg) ~ "\n");
         assert(reg);
         _jit_getarg_ptrint(jit_r(0), context_arg);
         const framePointerReg = jit_r(1);
+
         // load fp into framePointer reg
-        _jit_note(_jit, __FILE__.ptr, __LINE__);
+        _jit_name(_jit, "load context pointer for read_stack");
         load_size_t_immoffset(framePointerReg, jit_r(0), ContextOffset.framePointer);
 
         // low part of the register index is always valid
         const low_idx = (reg & 0xffff);
+        assert(low_idx && low_idx <= jit_v_num());
         assert(!regs.regStatus.isDirty(low_idx));
 
         jit_reg_t r1 = jit_v(low_idx - 1);
         // load the frameOffset from the frame pointer into r1
+        _jit_name(_jit, ("read stack low idx for offset: " ~ itos(fOffset) ~ "\0").ptr);
         _jit_new_node_www(_jit, jit_code_t.jit_code_ldxi_i, r1, framePointerReg, fOffset);
-
+        _jit_name(_jit, "read stack low idx done");
 
         if (const high_idx = (reg >> 16))
         {
@@ -593,8 +644,8 @@ struct LightningGen
     void Initialize()
     {
         // make sure jit state is initalized;
-        if (_jit) _jit_destroy_state(_jit);
-        else init_jit(null);
+        //if (_jit) _jit_destroy_state(_jit);
+        if(!_jit) init_jit(null);
         _jit = jit_new_state();
         currentFrameOffset = 4; // we don't start at zero because 0 is a special error value
         labelMaxCount = 4096;
@@ -623,10 +674,15 @@ struct LightningGen
         // assert(0, "Not properly implemented yet");
         _jit_prolog(_jit);
 
-        _jit_note(_jit, __FILE__.ptr, __LINE__);
         _jit_name(_jit, "context_arg".ptr);
         context_arg = _jit_arg(_jit); // RuntimeContext*
-        _jit_note(_jit, __FILE__.ptr, __LINE__);
+
+        _jit_getarg_ptrint(JIT_R0, context_arg);
+        // load context pointer into R0
+        load_size_t_immoffset(JIT_R2, JIT_R0, ContextOffset.stackPointer);
+        // load store stackPtr in FramePtr
+        store_size_t_immoffset(JIT_R0, ContextOffset.framePointer, JIT_R2);
+        // asm { int 3; }
     }
 
     void endFunction()
@@ -798,6 +854,7 @@ struct LightningGen
             _jit_new_node_ww(_jit, jit_code_t.jit_code_movr, lhs_r, rhs_r);
             regs.markUnused(rhs_r);
         }
+        regs.regStatus.markDirty(reg2idx(lhs_r));
     }
 
     void Ult3(BCValue result, BCValue lhs, BCValue rhs)
@@ -1226,16 +1283,34 @@ struct LightningGen
     void Load16(BCValue to, BCValue from) { assert(0, "Not Implemented yet"); }
     void Store16(BCValue to, BCValue from) { assert(0, "Not Implemented yet"); }
 
-    void spill_to_context(jit_reg_t r)
+    void unspill_from_context()
     {
-        const idx = r - jit_r(0);
-        assert(regs.spilled[idx] == false);
-        assert(idx < RegisterState.nTempRegs);
-        assert(idx == 1 || idx == 2); // might be relaxed later
-        _jit_getarg_ptrint(jit_r(0), context_arg);
-        auto offset = (ContextOffset.rSpill + (size_t.sizeof * idx));
-        storeToContextPtrSize(r, cast(ContextOffset)offset, jit_r(0));
-        regs.spilled[idx] = true;
+        foreach(r; jit_r(1) .. jit_r(3))
+        {
+            const idx = r - jit_r(0);
+            assert(regs.spilled[idx] == true);
+            assert(idx < RegisterState.nTempRegs);
+            assert(idx == 1 || idx == 2); // might be relaxed later
+            _jit_getarg_ptrint(jit_r(0), context_arg);
+            auto offset = (ContextOffset.rSpill + (size_t.sizeof * idx));
+            load_size_t_immoffset(r, jit_r(0), cast(int)offset);
+            regs.spilled[idx] = false;
+        }
+    }
+
+    void spill_to_context()
+    {
+        foreach(r; jit_r(1) .. jit_r(3))
+        {
+            const idx = r - jit_r(0);
+            assert(regs.spilled[idx] == false);
+            assert(idx < RegisterState.nTempRegs);
+            assert(idx == 1 || idx == 2); // might be relaxed later
+            _jit_getarg_ptrint(jit_r(0), context_arg);
+            auto offset = (ContextOffset.rSpill + (size_t.sizeof * idx));
+            storeToContextPtrSize(r, cast(ContextOffset)offset, jit_r(0));
+            regs.spilled[idx] = true;
+        }
     }
 
     void storeToContext32(jit_reg_t r, ContextOffset offset, jit_reg_t ctxPtrReg)
@@ -1391,14 +1466,7 @@ struct LightningGen
         // get the ctx to load the heap ptr from
         load_size_t_immoffset(JIT_R1, JIT_R0, ContextOffset.heapDataBegin);
         // R1 is now the heapPtr
-/+
-        import core.stdc.stdio;
-        _jit_prepare(_jit);
-        _jit_pushargi(_jit, cast(jit_word_t)(cast(void*)"to_r: %d\n".ptr));
-        _jit_ellipsis(_jit);
-        _jit_pushargr(_jit, to_r);
-        _jit_finishi(_jit, cast(void*)&printf);
-+/
+
         _jit_new_node_www(_jit, jit_code_t.jit_code_stxr_i, JIT_R1, to_r, from_r);
 
         // now do the store

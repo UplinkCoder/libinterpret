@@ -82,17 +82,17 @@ void main(string[] args)
         auto tmp4 = gen.genLocal(i32Type, "result3");
         gen.Set(tmp1, imm32(13));
         gen.Set(tmp2, imm32(14));
-//        gen.Set(tmp3, imm32(15));
-//        gen.Set(tmp4, imm32(16));
-//        gen.Set(tmp2, imm32(14));
+        gen.Set(tmp3, imm32(15));
+        gen.Set(tmp4, imm32(16));
+        gen.Set(tmp2, imm32(14));
         //gen.Add3(tmp1, imm32(0x64), imm32(0x32));
         //gen.Add3(tmp1, tmp1, imm32(0x48));
 //        gen.Store32(imm32(4), imm32(4));
  //       gen.Store32(imm32(8), imm32(8));
         gen.Store32(imm32(0), tmp1);
         gen.Store32(imm32(4), tmp2);
-//        gen.Store32(imm32(8), tmp3);
-//        gen.Store32(imm32(12), tmp4);
+        gen.Store32(imm32(8), tmp3);
+        gen.Store32(imm32(12), tmp4);
         gen.Ret(tmp1);
         gen.endFunction();
 
@@ -100,8 +100,8 @@ void main(string[] args)
         auto func = cast(fType)  _jit_emit(gen._jit);
         sw.stop();
         printf("usecs: %d\n", sw.peek.total!"usecs");
-        _jit_print(gen._jit);
-        _jit_disassemble(gen._jit);
+        //_jit_print(gen._jit);
+        //_jit_disassemble(gen._jit);
     printf("before execution stack[0 .. 4] == [%d, %d, %d, %d]\n", stack[0], stack[1], stack[2], stack[3]);
     func(&ctx);
     printf("%p == %p\n", ctx.framePointer, ctx.stackPointer);
