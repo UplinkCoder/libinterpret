@@ -58,10 +58,10 @@ struct RuntimeContext
     uint currentLine;
     const(char)* currentFile;
 
-    int framePointer;
-    int stackPointer;
+    ubyte* framePointer;
+    ubyte* stackPointer;
 
-    int* stackDataBegin;
+    ubyte* stackDataBegin;
     uint* stackDataLength;
 
     ubyte* heapDataBegin;
@@ -116,8 +116,8 @@ enum ContextOffset
     currentLine = RuntimeContext.init.currentLine.offsetof,
     currentFile = RuntimeContext.init.currentFile.offsetof,
 
-    framePointer = RuntimeContext.init.stackDataBegin.offsetof,
-    stackPointer = RuntimeContext.init.stackDataBegin.offsetof,
+    framePointer = RuntimeContext.init.framePointer.offsetof,
+    stackPointer = RuntimeContext.init.stackPointer.offsetof,
 
     stackDataBegin = RuntimeContext.init.stackDataBegin.offsetof,
     heapDataBegin = RuntimeContext.init.heapDataBegin.offsetof,
@@ -240,7 +240,7 @@ struct RegisterState
 bool isInRegisterRange(jit_reg_t r, jit_reg_t beg, jit_reg_t end)
 {
     bool result = true;
-    if (r < beg && r > end)
+    if (r < beg || r >= end)
         return result = false;
     
     return result;
@@ -445,7 +445,8 @@ struct LightningGen
             jit_reg_t r2 = jit_v(high_idx - 1);
             _jit_new_node_www(_jit, jit_code_t.jit_code_ldxi_i, r2, framePointerReg, fOffset + 4);
         }
-        _jit_note(_jit, __FILE__.ptr, __LINE__);
+
+
     }
 
     register_index allocReg(ushort fOffset, bool wantPair = false)
@@ -515,7 +516,7 @@ struct LightningGen
                 // well then we get a 'random' canidate and force evict
             {
                 auto nextEvict = nextEvictim();
-                const pair_idx = pairedWith[nextEvict];
+                const pair_idx = pairedWith[nextEvict - 1];
                 result = nextEvict;
                 // we sync on eviction
                 // now we need to unpair if needed
@@ -1265,8 +1266,19 @@ struct LightningGen
         {
             return _jit_new_node_www(_jit, jit_code_t.jit_code_ldxi_i, to_r, from_r, offset);
         }
-        scope(exit)
-            _jit_note(_jit, __FILE__.ptr, __LINE__);
+
+    }
+
+    jit_node_t* store_size_t_immoffset(jit_reg_t to_r, int offset, jit_reg_t from_r)
+    {
+        version(_64bit)
+        {
+            return _jit_new_node_www(_jit, jit_code_t.jit_code_stxi_l, offset, to_r, from_r);
+        }
+        else
+        {
+            return _jit_new_node_www(_jit, jit_code_t.jit_code_stxi_i, offset, to_r, from_r);
+        }
     }
 
     extern (C) uint RT_BoundsCheck(RuntimeContext* context)
