@@ -616,6 +616,18 @@ struct LightningGen
         regs.regStatus.markFree(hi_idx);
     }
 
+    void sync_stack()
+    {
+        append("reg_alloc.log", "Froce syncing all dirty registers");
+        auto dirty = regs.regStatus.nextDirty();
+        while(dirty)
+        {
+            auto offset = regs.frameOffsetInReg[dirty - 1];
+            write_stack(offset, dirty);
+            dirty = regs.regStatus.nextDirty();
+        }
+    }
+
     /// evict the value from the register
     void freeReg(jit_reg_t reg)
     {
@@ -780,13 +792,13 @@ struct LightningGen
 
     void endJmp(BCAddr atIp, BCLabel target)
     {
-        _jit_patch_at(_jit, locations[atIp.addr], locations[target.addr.addr]);
+        _jit_patch_at(_jit, locations[atIp.addr], locations[target.addr.addr - 1]);
     }
 
     void Jmp(BCLabel target)
     {
         auto jmp = _jit_new_node_p(_jit, jit_code_t.jit_code_jmpi, null);
-        _jit_patch_at(_jit, jmp, locations[target.addr.addr]);
+        _jit_patch_at(_jit, jmp, locations[target.addr.addr - 1]);
     }
 
     /// peform a conditional jmp based on the value of the parameter cond
@@ -1500,6 +1512,7 @@ struct LightningGen
     void Not(BCValue result, BCValue val) { assert(0, "Not Implemented yet"); }
     void Ret(BCValue val)
     {
+        sync_stack();
         _jit_getarg_ptrint(JIT_R0, context_arg);
 //        load_size_t_immoffset(JIT_R0, JIT_R0, offset);
 
@@ -1528,10 +1541,10 @@ struct LightningGen
     {
         void StrEq3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
     }
-    void Comment(const(char)[] comment) { assert(0, "Not Implemented yet"); }
+    void Comment(const(char)[] comment) { _jit_name(_jit, comment.ptr); }
     void Line(uint line)
     {
-        if (line != lastLine)
+        if (line != lastLine && context_arg !is null)
         { 
             //const rIdx = regs.aquireTempReg(false);
             auto rIdx = 1;
@@ -1548,7 +1561,10 @@ struct LightningGen
             //regs.releaseTempReg(r);
         }
     }
-    void File(string filename) { assert(0, "Not Implemented yet"); }
+    void File(string filename)
+    {
+
+    }
     void IToF32(BCValue result, BCValue value) { assert(0, "Not Implemented yet"); }
     void IToF64(BCValue result, BCValue value) { assert(0, "Not Implemented yet"); }
     void F32ToI(BCValue result, BCValue value) { assert(0, "Not Implemented yet"); }
