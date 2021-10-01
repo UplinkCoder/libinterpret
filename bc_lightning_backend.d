@@ -73,10 +73,7 @@ struct RuntimeContext
     uint* heapSizeP;
     uint* stackSizeP;
 
-    enum huge_stack = false;
-
-    // 0.5 GB Stack 3.5 GB Heap
-    enum stackAddrMask = ((1 << 31) | (1 << 30) | (1 << 29));
+    BCValue returnValue;
 
     /// if the two most significant bits are both one it's on the stack
     static bool isPointerToStack(uint unrealPointer)
@@ -126,6 +123,8 @@ enum ContextOffset
 
     heapSizeP = RuntimeContext.init.heapSizeP.offsetof,
     stackSizeP = RuntimeContext.init.stackSizeP.offsetof,
+
+    returnValue = RuntimeContext.init.returnValue.offsetof,
 }
 
 pragma(msg, "framePtrOffset: ", ContextOffset.framePointer);
