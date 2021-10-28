@@ -458,8 +458,9 @@ struct LightningGen
     {
         static hlt()
         {
-            asm {
-                int 3; 
+            version(X86Asm)
+            {
+                asm { int 3; }
             }
         }
         _jit_new_node_w(_jit, jit_code_t.jit_code_calli, cast(jit_word_t)&hlt);
@@ -505,15 +506,34 @@ struct LightningGen
         with(regs) with(regStatus)
         {
             // first let's look for a free register.
-            register_index nextReg = nextFree();
-            if (nextReg != 0)
+            register_index freeReg = nextFree();
+            if (freeReg != 0)
             {
                 assert(pairedWith[nextReg - 1] == 0, "free register cannot have pairing relationships!");
-                // we have a free register let's use it
-                regs.regStatus.markUsed(nextReg);
-                frameOffsetInReg[nextReg - 1] = fOffset;
-                result = nextReg;
-                append("reg_alloc.log", cast(void[])("... Found free Reg: " ~ enumToString(jit_v(result - 1))) ~ "\n\n");
+                if (wantPair)
+                {
+                    // when we want a pair another register has to be allocated.
+                    register_index freeReg2 = nextFree();
+                    if (freeReg2)
+                    {
+                        set_paired(freeReg, freeReg2);
+                        result = freeReg;
+                    append("reg_alloc.log", cast(void[])("... Found free Regs: " ~ 
+                        enumToString(jit_v(freeReg - 1)) ~ " : " ~
+                        enumToString(jit_v(freeReg2 - 1))
+                            ~ "\n\n"
+                    ));
+
+                    }
+                }
+                else
+                {
+                    // we have a free register let's use it
+                    regs.regStatus.markUsed(freeReg);
+                    frameOffsetInReg[freeReg - 1] = fOffset;
+                    result = freeReg;
+                    append("reg_alloc.log", cast(void[])("... Found free Reg: " ~ enumToString(jit_v(result - 1))) ~ "\n\n");
+                }
             }
             // no free register now we need to evict ... sigh
             // first let's look for someome marked for eviction
