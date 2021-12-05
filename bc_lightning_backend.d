@@ -1509,7 +1509,7 @@ struct LightningGen
         auto to_idx = getPairedRegisterIndex(to);
         // this is the stack address we want to load into
         assert(!regs.r2HasCond);
-        
+
         _jit_getarg_ptrint(JIT_R0, context_arg);
         static if (1)
         {
@@ -1518,7 +1518,7 @@ struct LightningGen
             heapoverflow_check(from_r, JIT_R2, JIT_R0);
         }
         load_size_t_immoffset(JIT_R1, JIT_R0, heapDataPtrOffset);
-        
+
         _jit_new_node_www(_jit, jit_code_t.jit_code_ldxr_i, LowReg(to_idx), from_r, JIT_R2);
 
         // load high part.

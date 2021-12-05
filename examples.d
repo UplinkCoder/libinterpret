@@ -48,6 +48,54 @@ auto testFact(GenT)(auto ref GenT gen)
 // static assert(testFact(BCGen.init).interpret([imm32(5)]) == imm32(120));
 +/
 
+auto zero(GenT)(auto ref GenT gen)
+{ with(gen)
+{
+    Initialize();
+        File("t.d");
+        Line(3);
+        beginFunction(0);//zero
+
+            Comment("genTemporary from:6434");
+            auto tmp1 = genTemporary(BCType(BCTypeEnum.Struct, 1), 12);//SP[4]
+
+            Alloc(tmp1, BCValue(Imm32(12)));
+
+            auto tmp2 = genTemporary(BCType(BCTypeEnum.Ptr, 1));//SP[8]
+            Add3(tmp2, tmp1, BCValue(Imm32(0)));
+            Store64(tmp2, BCValue(Imm64(0)));
+            destroyTemporary(tmp2);
+
+            auto tmp3 = genTemporary(BCType(BCTypeEnum.i32));//SP[8]
+
+            Set(tmp3, tmp1);
+
+            Store64(tmp3, BCValue(Imm64(0, true)));
+            destroyTemporary(tmp3);
+
+            auto tmp4 = genTemporary(BCType(BCTypeEnum.Struct, 1));//SP[8]
+
+            Call(tmp4, BCValue(Imm32(2)), [BCValue(Imm64(0, true)), tmp1]);
+            Ret(tmp4);
+        endFunction();
+
+        auto hnsecs_1_fn_1 = genParameter(BCType(BCTypeEnum.i64), "hnsecs");//SP[4]
+        auto thisPtr_2_fn_1 = genParameter(BCType(BCTypeEnum.Struct, 1), `thisPtr`);//SP[8]
+        beginFunction(1);//this
+
+            auto tmp1_fn_1 = genTemporary(BCType(BCTypeEnum.i64));//SP[12]
+            Add3(tmp1_fn_1, thisPtr_2_fn_1, BCValue(Imm32(0)));
+
+            Store64(tmp1_fn_1, hnsecs_1_fn_1);
+            destroyTemporary(tmp1_fn_1);
+            Ret(thisPtr_2_fn_1);
+
+        endFunction();
+
+    Finalize();
+}
+}
+
 auto countUp(GenT)(auto ref GenT gen)
 {
     with(gen)
@@ -123,7 +171,7 @@ void main(string[] args)
         gen._jit = jit_new_state();
 
         // testFact(gen);
-        countUp(gen);
+        zero(gen);
         auto func = cast(fType)  _jit_emit(gen._jit);
         sw.stop();
         printf("compile time usecs: %d\n", sw.peek.total!"usecs");
