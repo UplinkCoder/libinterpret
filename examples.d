@@ -171,7 +171,7 @@ void main(string[] args)
         gen._jit = jit_new_state();
 
         // testFact(gen);
-        zero(gen);
+        countUp(gen);
         auto func = cast(fType)  _jit_emit(gen._jit);
         sw.stop();
         printf("compile time usecs: %d\n", sw.peek.total!"usecs");
