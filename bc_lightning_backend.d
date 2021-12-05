@@ -152,6 +152,13 @@ static register_index reg2idx(jit_reg_t reg)
     return (reg  - jit_v(0)) + 1;
 }
 
+static jit_reg_t idx2reg(register_index idx)
+{
+    assert(idx >= 1 && idx <= jit_v_num(),
+        "register index not in range");
+    return  cast(jit_reg_t) (jit_v(0) + (idx - 1));
+}
+
 
 import std.file : append;
 struct RegisterState
@@ -179,11 +186,18 @@ struct RegisterState
     /// set two registers as paried
     void set_paired(jit_reg_t reg1, jit_reg_t reg2)
     {
-        assert(regStatus.isUnused(reg1) && regStatus.isUnused(reg2));
+        assert(
+            (
+                regStatus.isUnused(reg1) && regStatus.isUnused(reg2) 
+                && !regStatus.isDirty(reg1) && !regStatus.isDirty(reg2)
+            )
+            || (regStatus.isFree(reg1) && regStatus.isFree(reg2))
+
+        );
         assert(pairedWith[reg1] == 0 &&
                pairedWith[reg2] == 0);
-        const idx1 = reg1 - jit_v(0);
-        const idx2 = reg2 - jit_v(0);
+        const idx1 = reg2idx(reg1);
+        const idx2 = reg2idx(reg2);
 
         const pair_idx = (min(idx1, idx2) | (max(idx1, idx2) << 16));
 
@@ -329,7 +343,7 @@ struct LightningGen
     /// either we already have it in a register
     /// or we allocate a register for it
     /// if needed we evict a value
-    register_index getRegisterIndex(BCValue v)
+    register_index getRegisterIndex(BCValue v, bool pair = false)
     {
         assert(v);
         assert(v.vType != BCValueType.Immediate);
@@ -348,7 +362,7 @@ struct LightningGen
             }
         }
         append("reg_alloc.log", cast(void[])("... not found in register allocation table .. allocating ... \n"));
-        return allocReg(v.stackAddr, true);
+        return allocReg(v.stackAddr, pair);
     }
 
 
@@ -358,7 +372,7 @@ struct LightningGen
         if (basicTypeSize(v.type.type) <= 4)
         {
             const iReg =
-                cast(int)(getRegisterIndex(v));
+                cast(int)(getRegisterIndex(v, false));
             assert(iReg <= jit_v_num() && iReg > 0);
             return jit_v(iReg - 1);
         }
@@ -374,7 +388,7 @@ struct LightningGen
         if (basicTypeSize(v.type.type) == 8)
         {
             const RegIdx =
-                cast(int)(getRegisterIndex(v));
+                cast(int)(getRegisterIndex(v, true));
             assert (isRegisterPair(RegIdx));
             assert(isInRegisterRange(LowReg(RegIdx), jit_v(0), jit_v(jit_v_num() - 1)));
             assert(isInRegisterRange(HighReg(RegIdx), jit_v(1), jit_v(jit_v_num())));
@@ -472,6 +486,7 @@ struct LightningGen
     {
         append("reg_alloc.log", "Reading offset" ~ itos(fOffset) ~ "into regIdx: " ~ itos(reg) ~ "\n");
         assert(reg);
+        assert(!regs.regStatus.isFree(reg & ushort.max));
         _jit_getarg_ptrint(jit_r(0), context_arg);
         const framePointerReg = jit_r(1);
 
@@ -509,6 +524,7 @@ struct LightningGen
             register_index freeReg = nextFree();
             if (freeReg != 0)
             {
+                markUsed(freeReg); // we need to mark it used immediately otherwise we get it again when asking for a pair
                 assert(pairedWith[freeReg - 1] == 0, "free register cannot have pairing relationships!");
                 if (wantPair)
                 {
@@ -516,8 +532,13 @@ struct LightningGen
                     register_index freeReg2 = nextFree();
                     if (freeReg2)
                     {
-                        set_paired(jit_v(freeReg - 1), jit_v(freeReg2 - 1));
-                        result = freeReg;
+                        markUsed(freeReg2);
+                        auto lw_reg = min(freeReg, freeReg2);
+                        auto hi_reg = max(freeReg, freeReg2);
+
+                        set_paired(idx2reg(freeReg), idx2reg(freeReg2));
+                        result = lw_reg | hi_reg << 16;
+                        regs.regStatus.markUsed(freeReg);
                         append("reg_alloc.log", cast(void[])("... Found free Regs: " ~ 
                         enumToString(jit_v(freeReg - 1)) ~ " : " ~
                         enumToString(jit_v(freeReg2 - 1))
@@ -593,6 +614,7 @@ struct LightningGen
                 if (pair_idx != 0)
                 {
                     unpair(pair_idx);
+                    import core.stdc.stdio; printf("unpairing\n");
                 }
                 else
                 {
@@ -604,13 +626,12 @@ struct LightningGen
                 }
             }
 
-            assert(!regs.regStatus.isDirty(result));
             /// 
             const low_idx = (result & 0xFFFF);
+            assert(!regs.regStatus.isDirty(low_idx));
             frameOffsetInReg[low_idx - 1] = fOffset;
             assert(result != 0);
             read_stack(fOffset, result);
-
         }
         
         return result;
@@ -633,6 +654,7 @@ struct LightningGen
         
         regs.regStatus.markFree(lw_idx);
         regs.regStatus.markFree(hi_idx);
+        regs.regStatus.markClean(hi_idx);
     }
 
     void sync_stack()
