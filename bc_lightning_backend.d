@@ -509,16 +509,16 @@ struct LightningGen
             register_index freeReg = nextFree();
             if (freeReg != 0)
             {
-                assert(pairedWith[nextReg - 1] == 0, "free register cannot have pairing relationships!");
+                assert(pairedWith[freeReg - 1] == 0, "free register cannot have pairing relationships!");
                 if (wantPair)
                 {
                     // when we want a pair another register has to be allocated.
                     register_index freeReg2 = nextFree();
                     if (freeReg2)
                     {
-                        set_paired(freeReg, freeReg2);
+                        set_paired(jit_v(freeReg - 1), jit_v(freeReg2 - 1));
                         result = freeReg;
-                    append("reg_alloc.log", cast(void[])("... Found free Regs: " ~ 
+                        append("reg_alloc.log", cast(void[])("... Found free Regs: " ~ 
                         enumToString(jit_v(freeReg - 1)) ~ " : " ~
                         enumToString(jit_v(freeReg2 - 1))
                             ~ "\n\n"
