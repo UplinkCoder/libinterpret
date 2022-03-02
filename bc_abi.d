@@ -3,20 +3,23 @@
 
 module dmd.ctfe.bc_abi;
 
-import dmd.ctfe.bc_limits;
-import dmd.ctfe.bc_common;
+// import dmd.ctfe.bc_limits;
+// import dmd.ctfe.bc_common;
 
 
 enum PtrSize = 4;
 
 enum stackAddrMask = ((1 << 31) |
                       (1 << 30) |
-                      (1 << 29));
+                      (1 << 29) |
+                      (1 << 28) |
+                      (1 << 27) |
+                      (1 << 26));
 
 static bool isStackAddress(uint unrealPointer)
 {
     pragma(inline, true);
-    // a stack address has the upper 3 bits set
+    // a stack address has the upper 4 bits set
     return (unrealPointer & stackAddrMask) == stackAddrMask;
 }
 
@@ -33,11 +36,13 @@ static uint toStackOffset(uint unrealPointer)
     return (unrealPointer & ~stackAddrMask);
 }
 
-enum maxHeapAddress =  0b1101_1111_1111_1111_1111_1111_1111_1111;
+enum maxHeapAddress =  0b1111_1101_1111_1111_1111_1111_1111_1111;
 enum minHeapAddress =  0b0000_0000_0000_0000_0000_0000_0000_0000;
 
-enum minStackAddress = 0b1110_0000_0000_0000_0000_0000_0000_0000;
+enum minStackAddress = 0b1111_1110_0000_0000_0000_0000_0000_0000;
 enum maxStackAddress = 0b1111_1111_1111_1111_1111_1111_1111_1111;
+
+pragma(msg, maxStackAddress - minHeapAddress);
 
 static assert(isStackAddress(uint.max - ushort.max));
 static assert(!isStackAddress(int.max));
@@ -45,7 +50,7 @@ static assert(isHeapAddress(maxHeapAddress));
 static assert(!isHeapAddress(minStackAddress));
 static assert(!isHeapAddress(minStackAddress));
 static assert(!isStackAddress(!maxHeapAddress));
-
+/*
 bool needsUserSize(BCTypeEnum type)
 {
     with (BCTypeEnum) return type == Array || type == Struct;
@@ -55,7 +60,7 @@ bool typeIsPointerOnStack(BCTypeEnum type)
 {
     with (BCTypeEnum) return type == Class;
 }
-
+*/
 /// appended to a struct
 /// behind the last member
 struct StructMetaData
@@ -69,7 +74,7 @@ struct StructMetaData
 struct UnionMetaData
 {
     enum VoidInitBitfieldOffset = 0;
-    enum Size = bc_max_members/8;
+    // enum Size = bc_max_members/8;
 }
 
 /// prepended to a class
