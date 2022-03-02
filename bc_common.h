@@ -5,18 +5,13 @@
 #include <stdio.h>
 #include <string.h>
 
-#undef offsetof
-
+#undef  offsetof
 #define offsetof(st, m) \
     ((size_t)((char *)&((st *)0)->m - (char *)0))
 
-/// functions with index skipFn will be skipped
-/// calling them is equivlent to an expensive nop
-/// this is true for direct and indirect calls
-const uint32_t skipFn = UINT32_MAX;
-
-const uint32_t nodeFromName = UINT32_MAX - 1;
-const uint32_t currentScope = UINT32_MAX - 2;
+static const uint32_t skipFn = UINT32_MAX;
+static const uint32_t nodeFromName = UINT32_MAX - 1;
+static const uint32_t currentScope = UINT32_MAX - 2;
 
 #define CONSTEXPR
 
@@ -87,110 +82,11 @@ typedef enum BCTypeEnum
     BCTypeEnum_Slice,
 } BCTypeEnum;
 
-const char* BCTypeEnum_toChars(BCTypeEnum* self)
-{
-    switch(*self)
-    {
-    case BCTypeEnum_Undef:
-        return "BCTypeEnum_Undef";
-
-    case BCTypeEnum_Null:
-        return "BCTypeEnum_Null";
-
-    case BCTypeEnum_Void:
-        return "BCTypeEnum_Void";
-
-
-    case BCTypeEnum_c8:
-        return "BCTypeEnum_c8";
-
-    case BCTypeEnum_c16:
-        return "BCTypeEnum_c16";
-
-    case BCTypeEnum_c32:
-        return "BCTypeEnum_c32";
-
-
-    case BCTypeEnum_i8:
-        return "BCTypeEnum_i8";
-
-    case BCTypeEnum_i16:
-        return "BCTypeEnum_i16";
-
-    case BCTypeEnum_i32:
-        return "BCTypeEnum_i32";
-
-    case BCTypeEnum_i64:
-        return "BCTypeEnum_i64";
-
-
-    case BCTypeEnum_u8:
-        return "BCTypeEnum_u8";
-
-    case BCTypeEnum_u16:
-        return "BCTypeEnum_u16";
-
-    case BCTypeEnum_u32:
-        return "BCTypeEnum_u32";
-
-    case BCTypeEnum_u64:
-        return "BCTypeEnum_u64";
-
-
-    case BCTypeEnum_f23:
-        return "BCTypeEnum_f23";
-
-    case BCTypeEnum_f52:
-        return "BCTypeEnum_f52";
-
-
-    case BCTypeEnum_f106 :
-        return "BCTypeEnum_f106";
-
-    case BCTypeEnum_string8:
-        return "BCTypeEnum_string8";
-
-    case BCTypeEnum_string16:
-        return "BCTypeEnum_string16";
-
-    case BCTypeEnum_string32:
-        return "BCTypeEnum_string32";
-
-    case BCTypeEnum_Function:
-        return "BCTypeEnum_Function";
-
-    case BCTypeEnum_Delegate:
-        return "BCTypeEnum_Delegate";
-
-    case BCTypeEnum_Array:
-        return "BCTypeEnum_Array";
-
-    case BCTypeEnum_AArray:
-        return "BCTypeEnum_AArray";
-
-    case BCTypeEnum_Struct:
-        return "BCTypeEnum_Struct";
-
-    case BCTypeEnum_Class:
-        return "BCTypeEnum_Class";
-
-    case BCTypeEnum_Ptr:
-        return "BCTypeEnum_Ptr";
-
-    case BCTypeEnum_Slice:
-        return "BCTypeEnum_Slice";
-
-    }
-}
+EXTERN_C const char* BCTypeEnum_toChars(BCTypeEnum* self);
 
 typedef struct BCAddr
 {
     uint32_t addr;
-
-    //    T opCast(T : bool)()
-    //    {
-    //        return addr != 0;
-    //    }
 } BCAddr;
 
 typedef enum BCTypeFlags
@@ -199,14 +95,7 @@ typedef enum BCTypeFlags
     BCTypeFlags_Const = 1 << 0,
 } BCTypeFlags;
 
-const char* BCTypeFlags_toChars(BCTypeFlags* self)
-{
-    if (*self == 0)
-        return "None";
-
-    if ((*self & (1 << 0)) != 0)
-        return "Const";
-}
+EXTERN_C const char* BCTypeFlags_toChars(BCTypeFlags* self)
 
 #define STRUCT_NAME BCType
 typedef struct BCType
@@ -218,22 +107,8 @@ typedef struct BCType
     BCTypeFlags flags;
 } STRUCT_NAME;
 
-const char* BCType_toChars(BCType* self)
-{
-    char format_buffer[1024];
+EXTERN_C const char* BCType_toChars(BCType* self);
 
-    int sz = sprintf(format_buffer, "BCType\n\t{type: %s, typeIndex: %u, flags: %s}\n"
-            , BCTypeEnum_toChars(&self->type)
-            , self->typeIndex
-            , BCTypeFlags_toChars(&self->flags));
-
-    assert(sz < 1024);
-
-    char* result = (char*) malloc (sz);
-    memcpy(result, format_buffer, sz);
-
-    return result;
-}
 #undef STRUCT_NAME
 
 typedef enum BCValueType
@@ -258,53 +133,7 @@ typedef enum BCValueType
 
 } BCValueType;
 
-const char* BCValueType_toChars(const BCValueType* vTypePtr)
-{
-    const BCValueType vType = *vTypePtr;
-
-    switch(vType)
-    {
-        case BCValueType_Unknown:
-            return "BCValueType_Unknown";
-
-        case BCValueType_Temporary:
-            return "BCValueType_Temporary";
-
-        case BCValueType_Parameter:
-            return "BCValueType_Parameter";
-
-        case BCValueType_Local:
-            return "BCValueType_Local";
-
-
-        case BCValueType_StackValue:
-            return "BCValueType_StackValue";
-
-        case BCValueType_Immediate:
-            return "BCValueType_Immediate";
-
-        case BCValueType_HeapValue:
-            return "BCValueType_HeapValue";
-
-
-        case BCValueType_LastCond:
-            return "BCValueType_LastCond";
-
-        case BCValueType_Bailout:
-            return "BCValueType_Bailout";
-
-        case BCValueType_Exception:
-            return "BCValueType_Exception";
-
-        case BCValueType_ErrorWithMessage:
-            return "BCValueType_ErrorWithMessage";
-
-        case BCValueType_Error:
-            return "BCValueType_Error";
-    }
-
-    assert(0);
-}
+EXTERN_C const char* BCValueType_toChars(const BCValueType* vTypePtr);
 
 typedef struct BCHeapRef
 {
@@ -325,44 +154,9 @@ typedef struct BCHeapRef
 
     const char* name;
 #ifdef __cplusplus
-    bool operator bool() const pure
-    {
-        // the check for Undef is a workaround
-        // consider removing it when everything works correctly.
+    bool operator bool() const pure;
 
-        return this.vType != vType.Unknown;
-    }
-
-    STRUCT_NAME(const BCValue that)
-    {
-        switch (that.vType)
-        {
-        case BCValueType.StackValue, BCValueType.Parameter:
-        case BCValueType.Temporary:
-            stackAddr = that.stackAddr;
-            tmpIndex = that.tmpIndex;
-            break;
-
-        case BCValueType.Local:
-            stackAddr = that.stackAddr;
-            localIndex = that.localIndex;
-            this.name = that.name;
-            break;
-
-        case BCValueType.HeapValue:
-            heapAddr = that.heapAddr;
-            break;
-
-        case BCValueType.Immediate:
-            imm32 = that.imm32;
-            break;
-
-        default:
-            printf("vType unsupported: %s\n", BCValueType_toChars(that.vType));
-            assert(0);
-        }
-        vType = that.vType;
-    }
+    STRUCT_NAME(const BCValue that);
 #endif
 } STRUCT_NAME;
 #undef STRUCT_NAME
@@ -400,215 +194,35 @@ typedef struct BCValue
     //TODO PERF minor: use a 32bit value for heapRef;
     
 #ifdef _cplusplus
-    uint toUint() const pure
-    {
-        switch (this.vType)
-        {
-        case BCValueType.Parameter, BCValueType.Temporary,
-                BCValueType.StackValue:
-                return stackAddr;
-        case BCValueType.HeapValue:
-            return heapAddr;
-        case BCValueType.Immediate:
-            return imm32;
-        case BCValueType.Unknown:
-            return this.imm32;
-        default:
-            {
-                printf("toUint not implemented for %s\n", BCValueType_toChars(vType))
-                assert(0);
-            }
-        }
+    uint32_t toUint();
 
-    }
+    const char* toChars();
 
-    const char* toChars() const
-    {
-        const char* result = "vType: ";
-/*
-        result ~= enumToString(vType);
-        result ~= "\tType: "; 
-        result ~= type.toString;
-        result ~= "\n\tValue: ";
-        result ~= valueToString;
-        result ~= "\n";
-        if (name)
-            result ~= "\tname: " ~ name ~ "\n";
-*/
-        return result;
-    }
+    const char* valueToString();
 
-    string valueToString()
-    {
-        switch (vType)
-        {
-        case BCValueType.Local : goto case;
-        case BCValueType.Parameter, BCValueType.Temporary,
-                BCValueType.StackValue:
-                return "stackAddr: " ~ itos(stackAddr);
-        case BCValueType.HeapValue:
-            return "heapAddr: " ~ itos(heapAddr);
-        case BCValueType.Immediate:
-            return "imm: " ~ (type.type == BCTypeEnum.i64 || type.type == BCTypeEnum.f52
-                    ? itos64(imm64) : itos(imm32));
-        default:
-            return "unknown value format";
-        }
-    }
+    bool operator bool();
 
-    bool operator bool()
-    {
-        // the check for Undef is a workaround
-        // consider removing it when everything works correctly.
+    bool operator == (const BCValue* rhs);
 
-        return this.vType != vType.Unknown && this.type.type != BCTypeEnum.Undef;
-    }
+    STRUCT_NAME(const Imm32 imm32);
 
-    bool operator == (const BCValue* rhs) const
-    {
-        BCTypeEnum commonType = commonTypeEnum(this.type.type, rhs.type.type);
+    STRUCT_NAME(const Imm64 imm64);
 
-        if (this->vType == rhs->vType)
-        {
-            final switch (this->vType)
-            {
-            case BCValueType.StackValue,
-                    BCValueType.Parameter, BCValueType.Local:
-                    return this.stackAddr == rhs.stackAddr;
-            case BCValueType.Temporary:
-                return tmpIndex == rhs.tmpIndex;
-            case BCValueType.Immediate:
-                switch (commonType)
-                {
-                case BCTypeEnum.i32, BCTypeEnum.u32:
-                    {
-                        return imm32.imm32 == rhs.imm32.imm32;
-                    }
-                case BCTypeEnum.i64, BCTypeEnum.u64:
-                    {
-                        return imm64.imm64 == rhs.imm64.imm64;
-                    }
+    STRUCT_NAME(const Imm23f imm23f);
 
-                default:
-                    assert(0, "No comperasion for immediate");
-                }
-            case BCValueType.HeapValue:
-                return this.heapAddr == rhs.heapAddr;
+    STRUCT_NAME(const Imm52f imm52f);
 
-            case BCValueType.Unknown, BCValueType.Bailout:
-                return false;
-            case BCValueType.Error, BCValueType.ErrorWithMessage,
-                        BCValueType.Exception:
-                return false;
-            case BCValueType.LastCond:
-                return true;
-            }
+    STRUCT_NAME(const BCParameter param);
 
-        }
+    STRUCT_NAME(const StackAddr sp, const BCType type, const ushort tmpIndex = 0);
 
-        return false;
-    }
+    STRUCT_NAME(const StackAddr sp, const BCType type, const ushort localIndex, const char* name);
 
-    STRUCT_NAME(const Imm32 imm32) pure
-    {
-        this.type.type = imm32.signed ? BCTypeEnum.i32 : BCTypeEnum.u32;
-        this.vType = BCValueType.Immediate;
-        this.imm32.imm32 = imm32.imm32;
-    }
+    STRUCT_NAME(const void* base, const short addr, const BCType type);
 
-    STRUCT_NAME(const Imm64 imm64) pure
-    {
-        this.type.type = imm64.signed ? BCTypeEnum.i64 : BCTypeEnum.u64;
-        this.vType = BCValueType.Immediate;
-        this.imm64 = imm64;
-    }
+    STRUCT_NAME(const HeapAddr addr, const BCType type = i32Type);
 
-    STRUCT_NAME(const Imm23f imm23f) pure @trusted
-    {
-        this.type.type = BCTypeEnum.f23;
-        this.vType = BCValueType.Immediate;
-        this.imm32.imm32 = *cast(uint*)&imm23f;
-    }
-
-    STRUCT_NAME(const Imm52f imm52f) pure @trusted
-    {
-        this.type.type = BCTypeEnum.f52;
-        this.vType = BCValueType.Immediate;
-        this.imm64.imm64 = *cast(uint64_t*)&imm52f;
-    }
-
-    STRUCT_NAME(const BCParameter param) pure
-    {
-        this.vType = BCValueType.Parameter;
-        this.type = param.type;
-        this.paramIndex = param.idx;
-        this.stackAddr = param.pOffset;
-        this.name = param.name;
-    }
-
-    STRUCT_NAME(const StackAddr sp, const BCType type, const ushort tmpIndex = 0) pure
-    {
-        this.vType = BCValueType.StackValue;
-        this.stackAddr = sp;
-        this.type = type;
-        this.tmpIndex = tmpIndex;
-    }
-
-    STRUCT_NAME(const StackAddr sp, const BCType type, const ushort localIndex, const char* name) pure
-    {
-        this.vType = BCValueType.Local;
-        this.stackAddr = sp;
-        this.type = type;
-        this.localIndex = localIndex;
-        this.name = name;
-    }
-
-    STRUCT_NAME(const void* base, const short addr, const BCType type) pure
-    {
-        this.vType = BCValueType.StackValue;
-        this.stackAddr = StackAddr(addr);
-        this.type = type;
-    }
-
-    STRUCT_NAME(const HeapAddr addr, const BCType type = i32Type) pure
-    {
-        this.vType = BCValueType.HeapValue;
-        this.type = type;
-        this.heapAddr = addr;
-    }
-
-    STRUCT_NAME(const BCHeapRef heapRef) pure
-    {
-        this.vType = heapRef.vType;
-        switch (vType)
-        {
-        case BCValueType.StackValue, BCValueType.Parameter:
-            stackAddr = heapRef.stackAddr;
-            tmpIndex = heapRef.tmpIndex;
-            break;
-        case BCValueType.Local:
-            stackAddr = heapRef.stackAddr;
-            tmpIndex = heapRef.localIndex;
-            name = heapRef.name;
-            break;
-
-        case BCValueType.Temporary:
-            stackAddr = heapRef.stackAddr;
-            tmpIndex = heapRef.tmpIndex;
-            break;
-
-        case BCValueType.HeapValue:
-            heapAddr = heapRef.heapAddr;
-            break;
-
-        case BCValueType.Immediate:
-            imm32 = heapRef.imm32;
-            break;
-
-        default:
-            assert(0, "vType unsupported: " ~ enumToString(vType));
-        }
-    }
+    STRUCT_NAME(const BCHeapRef heapRef);
 #endif
 } STRUCT_NAME;
 
@@ -626,7 +240,7 @@ struct CndJmpBegin
     bool ifTrue;
 };
 
-CONSTEXPR const uint32_t align4(const uint32_t val)
+CONSTEXPR static inline const uint32_t align4(const uint32_t val)
 {
     return ((val + 3) & ~3);
 }
@@ -654,99 +268,12 @@ CONSTEXPR static inline uint32_t align16(const uint32_t val)
     return ((val + 15) & ~15);
 }
 
-const uint32_t basicTypeSize(const BCTypeEnum bct)
-{
-    switch (bct)
-    {
-    case BCTypeEnum_Undef:
-        {
-            assert(!"This is not supposed to happen");
-            return 0;
-        }
-    case BCTypeEnum_c8:
-    case BCTypeEnum_i8:
-    case BCTypeEnum_u8:
-        {
-            return 1;
-        }
-    case BCTypeEnum_c16:
-    case BCTypeEnum_i16:
-    case BCTypeEnum_u16:
-        {
-            return 2;
-        }
-    case BCTypeEnum_c32:
-    case BCTypeEnum_i32:
-    case BCTypeEnum_u32:
-    case BCTypeEnum_f23:
-        {
-            return 4;
-        }
-    case BCTypeEnum_i64:
-    case BCTypeEnum_u64:
-    case BCTypeEnum_f52:
-        {
-            return 8;
-        }
-    case BCTypeEnum_f106:
-        {
-            return 16;
-        }
+EXTERN_C const uint32_t basicTypeSize(const BCTypeEnum bct);
 
-    case BCTypeEnum_Function:
-    case BCTypeEnum_Null:
-        {
-            return 4;
-        }
-    case BCTypeEnum_Delegate:
-        {
-            return 8;
-        }
-    case BCTypeEnum_Ptr:
-    {
-            assert(!"Ptr is not supposed to be a basicType anymore");
-            return 0;
-    }
-
-    case BCTypeEnum_string8:
-    case BCTypeEnum_string16:
-    case BCTypeEnum_string32:
-    {
-        //FIXME actually strings don't have a basicTypeSize as is
-        return 16;
-    }
+EXTERN_C const uint32_t adjustmentMask(BCTypeEnum t);
 
 
-    case BCTypeEnum_Void:
-    case BCTypeEnum_Array:
-    case BCTypeEnum_Slice:
-    case BCTypeEnum_Struct:
-    case BCTypeEnum_Class:
-    case BCTypeEnum_AArray:
-    {
-        return 0;
-    }
-
-    default : assert(0);
-    }
-}
-
-
-const uint32_t adjustmentMask(BCTypeEnum t)
-{
-    uint32_t mask = 0;
-    int typeSize = basicTypeSize(t);
-
-    if (typeSize == 1)
-        mask = 0xFF;
-    else if (typeSize == 2)
-        mask = 0xFFFF;
-
-    return mask;
-}
-
-
-const uint32_t fastLog10(const uint32_t val)
+static inline const uint32_t fastLog10(const uint32_t val)
 {
     return (val < 10) ? 0 : (val < 100) ? 1 : (val < 1000) ? 2 : (val < 10000) ? 3
         : (val < 100000) ? 4 : (val < 1000000) ? 5 : (val < 10000000) ? 6
@@ -755,7 +282,7 @@ const uint32_t fastLog10(const uint32_t val)
 
 /*@unique*/
 /*
-static immutable fastPow10tbl = [
+inline static const fastPow10tbl = [
     1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000,
 ];
 
@@ -821,62 +348,13 @@ string doubleToString(double d)
 }
 */
 
-bool anyOf(BCTypeEnum type, const BCTypeEnum acceptedTypes[], uint32_t n_types)
-{
-    bool result = false;
+EXTERN_C bool BCTypeEnum_anyOf(BCTypeEnum type, const BCTypeEnum acceptedTypes[], uint32_t n_types);
 
-    for(int i = 0; i < n_types; i++)
-    {
-        if (type == acceptedTypes[i])
-        {
-            result = true;
-            break;
-        }
-    }
+EXTERN_C bool BCType_isFloat(BCType bct);
 
-    return result;
-}
+EXTERN_C bool BCType_isBasicBCType(BCType bct);
 
-bool isFloat(BCType bct)
-{
-    return bct.type == BCTypeEnum_f23 || bct.type == BCTypeEnum_f52;
-}
-
-bool isBasicBCType(BCType bct)
-{
-    return !(bct.type == BCTypeEnum_Struct || bct.type == BCTypeEnum_Array || bct.type == BCTypeEnum_Class
-            || bct.type == BCTypeEnum_Slice || bct.type == BCTypeEnum_Undef || bct.type == BCTypeEnum_Ptr
-            || bct.type == BCTypeEnum_AArray);
-}
-
-bool isStackValueOrParameter(BCValue val)
-{
-    return (val.vType == BCValueType_StackValue || val.vType == BCValueType_Parameter || val.vType == BCValueType_Local);
-}
-
-/*
-string typeFlagsToString(BCTypeFlags flags) pure @safe
-{
-    string result;
-
-    if (!flags)
-    {
-        result = "None";
-        goto Lret;
-    }
-
-    if (flags & BCTypeFlags_Const)
-    {
-        result ~= "Const|";
-    }
-
-    // trim last |
-    result = result[0 .. $-1];
-
-Lret:
-    return result;
-}
-*/
+EXTERN_C BCValue_isStackValueOrParameter(BCValue val);
 
 struct RegStatusList
 {
@@ -981,54 +459,10 @@ struct RegStatusList
 #endif
 } STRUCT_NAME;
 #undef STRUCT_NAME
-/*
-static assert(()
-    {
-        RegStatusList!16 f;
 
-        assert(f.n_free == 16);
-        assert(f.nextDirty() == 0);
-        assert(f.nextUnused() == 0);
-        auto nextReg = f.nextFree();
-        f.markUsed(nextReg);
-        assert(f.n_free == 15);
-        f.markDirty(nextReg);
-        assert(f.nextDirty() == nextReg);
-        f.markClean(nextReg);
-        assert(f.nextDirty() == 0);
-        foreach(r; 1 .. 17)
-            f.markUnused(r);
-        foreach(r; 0 .. 16)
-        {
-            auto nextUnused = f.nextUnused();
-            f.markUsed(nextUnused);
-        }
-        assert(f.nextUnused() == 0);
+EXTERN_C const uint8_t toParamCode(const BCValue val);
 
-        RegStatusList!0 d = RegStatusList!0(2);
-        assert(d.n_free() == 2);
-
-        return true;
-    }
-());
-*/
-
-const uint8_t toParamCode(const BCValue val)
-{
-    if (val.type.type == BCTypeEnum_i32)
-        return 0x0;
-    /*else if (val.type.type)
-        return 0b0001;*/
-    else if (val.type.type == BCTypeEnum_Struct)
-        return 0x2;
-    else if (val.type.type == BCTypeEnum_Slice
-            || val.type.type == BCTypeEnum_Array || val.type.type == BCTypeEnum_string8)
-        return 0x3;
-    else
-        assert(!"ParameterType unsupported");
-}
-
-const int BCHeap_initHeapMax = (1 << 15);
+static inline const int BCHeap_initHeapMax = (1 << 15);
 
 typedef struct BCHeap
 {
@@ -1037,12 +471,12 @@ typedef struct BCHeap
     uint8_t* heapData;
 } BCHeap;
 
-const int heapSizeOffset = offsetof(BCHeap, heapSize);
-const int heapMaxOffset = offsetof(BCHeap, heapMax);
-const int heapDataOffset = offsetof(BCHeap, heapData);
+static inline const int heapSizeOffset = offsetof(BCHeap, heapSize);
+static inline const int heapMaxOffset = offsetof(BCHeap, heapMax);
+static inline const int heapDataOffset = offsetof(BCHeap, heapData);
 
-const int heapDataPtrOffset    = offsetof(BCHeap, heapData) + sizeof(uint8_t*);
-const int heapDataLengthOffset = offsetof(BCHeap, heapData) + sizeof(uint8_t*) + sizeof(void*);
+static inline const int heapDataPtrOffset    = offsetof(BCHeap, heapData) + sizeof(uint8_t*);
+static inline const int heapDataLengthOffset = offsetof(BCHeap, heapData) + sizeof(uint8_t*) + sizeof(void*);
 
 typedef struct BCLabel
 {
@@ -1069,45 +503,15 @@ typedef struct BCParameter
 
 #define imm32(VALUE) imm32_((VALUE), false);
 
-BCValue imm32_(uint32_t value, bool signed_)
-{
-    BCValue ret;
-
-    ret.vType = BCValueType_Immediate;
-    ret.type.type = signed_ ? BCTypeEnum_i32 : BCTypeEnum_u32;
-    ret.type.typeIndex = 0;
-    ret.type.flags = BCTypeFlags_None;
-    ret.imm32.imm32 = value;
-
-    ret.imm64.imm64 &= UINT32_MAX;
-    return ret;
-}
+EXTERN_C BCValue imm32_(uint32_t value, bool signed_);
 
 #define imm64(VALUE) imm64_((VALUE), false);
 
-BCValue imm64_(uint64_t value, bool signed_)
-{
-    BCValue ret;
+EXTERN_C BCValue imm64_(uint64_t value, bool signed_);
 
-    ret.vType = BCValueType_Immediate;
-    ret.type.type = signed_ ? BCTypeEnum_i64 : BCTypeEnum_u64;
-    ret.type.typeIndex = 0;
-    ret.type.flags = BCTypeFlags_None;
-    ret.imm64.imm64 = value;
-    return ret;
-}
+EXTERN_C BCValue i32(BCValue val)
 
-BCValue i32(BCValue val)
-{
-    val.type.type = BCTypeEnum_i32;
-    return val;
-}
-
-BCValue u32(BCValue val)
-{
-    val.type.type = BCTypeEnum_u32;
-    return val;
-}
+EXTERN_C BCValue u32(BCValue val)
 
 typedef struct Imm23f
 {
@@ -1132,23 +536,6 @@ typedef struct BCBranch
     BCLabel ifFalse;
 } BCBranch;
 
-/*
-template BCGenFunction(T, alias fn)
-{
-    static assert(ensureIsBCGen!T && is(typeof(fn()) == T));
-    BCValue[] params;
-
-    static if (is(typeof(T.init.functionalize()) == string))
-    {
-        static immutable BCGenFunction = mixin(fn().functionalize);
-    }
-    else static if (is(typeof(T.init.interpret(typeof(T.init.byteCode), typeof(params).init)()) : int))
-    {
-        static immutable BCGenFunction = ((BCValue[] args,
-                BCHeap* heapPtr) => fn().interpret(args, heapPtr));
-    }
-}
-*/
 /*
 template ensureIsBCGen(BCGenT)
 {
@@ -1269,52 +656,10 @@ template ensureIsBCGen(BCGenT)
 }
 */
 /// commonType enum used for implicit conversion
-static const BCTypeEnum smallIntegerTypes[] = {BCTypeEnum_u16, BCTypeEnum_u8,
+extern inline static const BCTypeEnum smallIntegerTypes[] = {BCTypeEnum_u16, BCTypeEnum_u8,
                                       BCTypeEnum_i16, BCTypeEnum_i8,
                                       BCTypeEnum_c32, BCTypeEnum_c16, BCTypeEnum_c8};
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof(A[0]))
 
-BCTypeEnum commonTypeEnum(BCTypeEnum lhs, BCTypeEnum rhs)
-{
-    // HACK
-
-    BCTypeEnum commonType = BCTypeEnum_Undef;
-
-    if (lhs == BCTypeEnum_f52 || rhs == BCTypeEnum_f52)
-    {
-        commonType = BCTypeEnum_f52;
-    }
-    else if (lhs == BCTypeEnum_f23 || rhs == BCTypeEnum_f23)
-    {
-        commonType = BCTypeEnum_f23;
-    }
-    else if (lhs == BCTypeEnum_u64 || rhs == BCTypeEnum_u64)
-    {
-        commonType = BCTypeEnum_u64;
-    }
-    else if (lhs == BCTypeEnum_i64 || rhs == BCTypeEnum_i64)
-    {
-        commonType = BCTypeEnum_i64;
-    }
-    else if (lhs == BCTypeEnum_u32 || rhs == BCTypeEnum_u32)
-    {
-        commonType = BCTypeEnum_u32;
-    }
-    else if (lhs == BCTypeEnum_i32 || rhs == BCTypeEnum_i32)
-    {
-        commonType = BCTypeEnum_i32;
-    }
-    else if (anyOf(lhs, smallIntegerTypes, ARRAY_SIZE(smallIntegerTypes)) || anyOf(rhs, smallIntegerTypes, ARRAY_SIZE(smallIntegerTypes)))
-    {
-        commonType = BCTypeEnum_i32;
-    }
-
-    if (commonType == BCTypeEnum_Undef)
-    {
-        // debug { if (!__ctfe) writeln("could not find common type for lhs: ", lhs, " and rhs: ", rhs); }
-    }
-
-    return commonType;
-}
-
+EXTERN_C BCTypeEnum BCTypeEnum_commonTypeEnum(BCTypeEnum lhs, BCTypeEnum rhs);
 #undef offsetof
