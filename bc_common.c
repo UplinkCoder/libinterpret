@@ -5,6 +5,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef _cplusplus
+#define EXTERN_C extern "C"
+#else
+#define EXTERN_C extern
+#endif
+
 #undef offsetof
 
 #define offsetof(st, m) \
@@ -1066,10 +1072,7 @@ typedef struct BCParameter
     const char* name;
 } BCParameter;
 
-
-#define imm32(VALUE) imm32_((VALUE), false);
-
-BCValue imm32_(uint32_t value, bool signed_)
+EXTERN_C BCValue imm32_(uint32_t value, bool signed_)
 {
     BCValue ret;
 
@@ -1082,10 +1085,9 @@ BCValue imm32_(uint32_t value, bool signed_)
     ret.imm64.imm64 &= UINT32_MAX;
     return ret;
 }
+#define imm32(VALUE) imm32_((VALUE), false);
 
-#define imm64(VALUE) imm64_((VALUE), false);
-
-BCValue imm64_(uint64_t value, bool signed_)
+EXTERN_C BCValue imm64_(uint64_t value, bool signed_)
 {
     BCValue ret;
 
@@ -1096,6 +1098,7 @@ BCValue imm64_(uint64_t value, bool signed_)
     ret.imm64.imm64 = value;
     return ret;
 }
+#define imm64(VALUE) imm64_((VALUE), false);
 
 BCValue i32(BCValue val)
 {

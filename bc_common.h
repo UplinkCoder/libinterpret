@@ -5,6 +5,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#pragma once
+
+#ifdef _cplusplus
+#define EXTERN_C extern "C"
+#else
+#define EXTERN_C extern
+#endif
+
 #undef  offsetof
 #define offsetof(st, m) \
     ((size_t)((char *)&((st *)0)->m - (char *)0))
@@ -95,7 +103,7 @@ typedef enum BCTypeFlags
     BCTypeFlags_Const = 1 << 0,
 } BCTypeFlags;
 
-EXTERN_C const char* BCTypeFlags_toChars(BCTypeFlags* self)
+EXTERN_C const char* BCTypeFlags_toChars(BCTypeFlags* self);
 
 #define STRUCT_NAME BCType
 typedef struct BCType
@@ -354,7 +362,7 @@ EXTERN_C bool BCType_isFloat(BCType bct);
 
 EXTERN_C bool BCType_isBasicBCType(BCType bct);
 
-EXTERN_C BCValue_isStackValueOrParameter(BCValue val);
+EXTERN_C bool BCValue_isStackValueOrParameter(BCValue val);
 
 struct RegStatusList
 {
@@ -509,9 +517,8 @@ EXTERN_C BCValue imm32_(uint32_t value, bool signed_);
 
 EXTERN_C BCValue imm64_(uint64_t value, bool signed_);
 
-EXTERN_C BCValue i32(BCValue val)
-
-EXTERN_C BCValue u32(BCValue val)
+EXTERN_C BCValue i32(BCValue val);
+EXTERN_C BCValue u32(BCValue val);
 
 typedef struct Imm23f
 {
@@ -656,10 +663,12 @@ template ensureIsBCGen(BCGenT)
 }
 */
 /// commonType enum used for implicit conversion
-extern inline static const BCTypeEnum smallIntegerTypes[] = {BCTypeEnum_u16, BCTypeEnum_u8,
+inline static const BCTypeEnum smallIntegerTypes[] = {BCTypeEnum_u16, BCTypeEnum_u8,
                                       BCTypeEnum_i16, BCTypeEnum_i8,
                                       BCTypeEnum_c32, BCTypeEnum_c16, BCTypeEnum_c8};
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof(A[0]))
 
 EXTERN_C BCTypeEnum BCTypeEnum_commonTypeEnum(BCTypeEnum lhs, BCTypeEnum rhs);
 #undef offsetof
+
+static inline const BCType BCType_i32 = {BCTypeEnum_i32}; 

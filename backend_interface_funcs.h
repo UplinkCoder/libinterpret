@@ -1,5 +1,5 @@
-#include "bc_common.h"
 #include <stdarg.h>
+#include "bc_common.h"
 
 typedef struct BackendInterface BackendInterface;
 
