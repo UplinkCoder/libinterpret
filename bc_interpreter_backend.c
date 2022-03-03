@@ -1220,6 +1220,60 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
     if (self->byteCodeCount > ARRAY_SIZE(self->byteCodeArray))
             codeP = self->byteCodeArrayExtra;
 
+    int argOffset = 1;
+    for(int i = 0; i < n_args;i++)
+    {
+        BCValue* arg = args + i;
+        assert(arg->vType == BCValueType_Immediate);
+
+        switch (arg->type.type)
+        {
+            case BCTypeEnum_i32:
+            case BCTypeEnum_i16:
+            case BCTypeEnum_i8:
+            {
+                stackP[argOffset++] = cast(int32_t)arg->imm32.imm32;
+            }
+            break;
+
+            case BCTypeEnum_u32:
+            case BCTypeEnum_f23:
+            case BCTypeEnum_c8:
+            case BCTypeEnum_u16:
+            case BCTypeEnum_u8:
+            {
+                stackP[argOffset++] = cast(uint32_t)arg->imm32.imm32;
+            }
+            break;
+
+        case BCTypeEnum_i64:
+            {
+                stackP[argOffset++] = arg->imm64.imm64;
+            }
+            break;
+
+        case BCTypeEnum_u64:
+        case BCTypeEnum_f52:
+        {
+            stackP[argOffset++] = arg->imm64.imm64;
+        }
+        break;
+
+        case BCTypeEnum_Struct:
+        case BCTypeEnum_Class:
+        case BCTypeEnum_string8:
+        case BCTypeEnum_Array:
+            {
+                // This might need to be removed again?
+                stackP[argOffset++] = arg->heapAddr.addr;
+            }
+            break;
+        default:
+            //return -1;
+                   assert(0);//, "unsupported Type " ~ enumToString(arg.type.type));
+        }
+    }
+
     while (true)
     {
         const uint32_t lw = (codeP)[state.ip];
@@ -2910,11 +2964,11 @@ static inline BCValue BCGen_run(BCGen* self, uint32_t fnIdx, BCValue* args, uint
     BCValue result;
 
     assert(self->finalized);
-    
+
     BCHeap newHeap = {0};
     newHeap.heapMax = 1 << 14;
     newHeap.heapData = malloc(newHeap.heapMax);
-    
+
     result = BCGen_interpret(self, fnIdx, args, n_args, &newHeap);
 
     return result;
