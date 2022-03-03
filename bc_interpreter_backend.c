@@ -1,7 +1,7 @@
 /**
  * Written By Stefan Koch in 2016 - 2022
 */
- 
+
 #include "bc_common.h"
 #include "backend_interface_funcs.h"
 
@@ -250,7 +250,7 @@ static inline int BCGen_ShortInst16Ex(const LongInst i, uint8_t ex, uint16_t imm
     return i | ex << 8 | imm << 16;
 }
 
-typedef enum BCFunctionTypeEnum 
+typedef enum BCFunctionTypeEnum
 {
     BCFunctionTypeEnum_Undef,
     BCFunctionTypeEnum_Builtin,
@@ -267,8 +267,8 @@ typedef struct BCFunction
     uint16_t nArgs;
     uint16_t maxStackUsed;
 
-    uint32_t* byteCode; // should be const but currently we need to assign to this;
-    uint32_t byteCode_Size;
+    uint32_t bytecode_start; // should be const but currently we need to assign to this;
+    uint32_t bytecode_end;
 } BCFunction;
 
 typedef struct BCGen
@@ -284,9 +284,12 @@ typedef struct BCGen
 
     uint8_t parameterCount;
     uint16_t temporaryCount;
-    uint32_t n_functions;
 
-    uint32_t functionId;
+    BCFunction* functions;
+    uint32_t functionCount;
+    uint32_t functionCapacity;
+
+    uint32_t functionIdx;
     void* fd;
     bool insideFunction;
 
@@ -322,12 +325,15 @@ static inline void BCGen_Init(BCGen* self)
     self->sp = 4;
 
     self->insideFunction = 0;
-    self->functionId = 0;
-    self->n_functions = 0;
+    self->functionIdx = 0;
 
-    self->calls = malloc(sizeof(RetainedCall) * INITIAL_CALLS_CAPACITY);
+    self->calls = (RetainedCall*) malloc(sizeof(RetainedCall) * INITIAL_CALLS_CAPACITY);
     self->callCount = 0;
-    self->callCapacity = 0;
+    self->callCapacity = INITIAL_CALLS_CAPACITY;
+
+    self->functions = (BCFunction*)malloc(sizeof(BCFunction) * INITIAL_LOCALS_CAPACITY);
+    self->functionCount = 0;
+    self->functionCapacity = INITIAL_LOCALS_CAPACITY;
 }
 
 
@@ -502,44 +508,44 @@ static inline void BCGen_Finalize(BCGen* self)
 }
 
 
-static inline uint32_t BCGen_beginFunction(BCGen* self, uint32_t fnId, void* fd)
+static inline uint32_t BCGen_beginFunction(BCGen* self, uint32_t fnIdx, void* fd)
 {
     assert(self->fd == 0);
-    
-    if (!fnId)
-        fnId = ++self->n_functions;
 
-    self->ip += 4;
-    
+    if (!fnIdx)
+        fnIdx = ++self->functionCount;
+
+    // emit four zeros as start marker
+    BCGen_emit2(self, 0, 0);
+    BCGen_emit2(self, 0, 0);
+
+    BCFunction* f = self->functions + (fnIdx - 1);
+    f->bytecode_start = self->ip;
+
     self->insideFunction = true;
-    self->functionId = fnId;
+    self->functionIdx = fnIdx;
     self->fd = fd;
 
-    return fnId;
+    return fnIdx;
 }
 
-static inline BCFunction BCGen_endFunction(BCGen* self, uint32_t fIdx)
+static inline void BCGen_endFunction(BCGen* self, uint32_t fIdx)
 {
     assert(self->insideFunction);
-    assert(self->functionId == fIdx);
+    assert(self->functionIdx == fIdx);
     self->insideFunction = false;
-    
+
     self->localCount = 0;
 
-    BCFunction result = {0};
-    
-    result.type = BCFunctionTypeEnum_Bytecode;
-    result.maxStackUsed = self->sp;
-    result.fn = self->functionId;
-    {
-        // MUTEX BEGIN
-        // result.byteCode = byteCodeArray[4 .. ip];
-        // MUTEX END
-    }
+    BCFunction *f = self->functions + (fIdx - 1);
+
+    f->type = BCFunctionTypeEnum_Bytecode;
+    f->maxStackUsed = self->sp;
+    f->fn = self->functionIdx;
+    f->bytecode_end = self->ip;
+
     self->sp = 4;
     self->fd = 0;
-
-    return result;
 }
 
 static inline BCValue BCGen_genLocal(BCGen* self, BCType bct, const char* name)
@@ -1324,7 +1330,7 @@ void endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     void Call(BCValue result, BCValue fn, BCValue[] args)
     {
         auto call_id = pushOntoStack(imm32(callCount + 1)).stackAddr;
-        calls[callCount++] = RetainedCall(fn, args, functionId, ip, sp);
+        calls[callCount++] = RetainedCall(fn, args, functionIdx, ip, sp);
         emitLongInst(LongInst_Call, result.stackAddr, call_id);
     }
 

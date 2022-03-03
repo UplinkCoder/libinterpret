@@ -18,13 +18,10 @@
 #define offsetof(st, m) \
     ((size_t)((char *)&((st *)0)->m - (char *)0))
 
-/// functions with index skipFn will be skipped
-/// calling them is equivlent to an expensive nop
-/// this is true for direct and indirect calls
-
 #define CONSTEXPR
+typedef const char* cstring;
 
-const char* BCTypeEnum_toChars(BCTypeEnum* self)
+cstring BCTypeEnum_toChars(BCTypeEnum* self)
 {
     switch(*self)
     {
