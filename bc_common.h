@@ -7,7 +7,7 @@
 
 #pragma once
 
-#ifdef _cplusplus
+#ifdef __cplusplus
 #define EXTERN_C extern "C"
 #else
 #define EXTERN_C extern
@@ -162,7 +162,7 @@ typedef struct BCHeapRef
 
     const char* name;
 #ifdef __cplusplus
-    bool operator bool() const pure;
+    operator bool();
 
     STRUCT_NAME(const BCValue that);
 #endif
@@ -181,8 +181,8 @@ typedef struct BCValue
 
     union
     {
-        int8_t paramIndex;
-        uint16_t tmpIndex;
+        int8_t parameterIndex;
+        uint16_t temporaryIndex;
         uint16_t localIndex;
     };
 
@@ -201,7 +201,7 @@ typedef struct BCValue
     };
     //TODO PERF minor: use a 32bit value for heapRef;
     
-#ifdef _cplusplus
+#ifdef __cplusplus
     uint32_t toUint();
 
     const char* toChars();
@@ -234,10 +234,8 @@ typedef struct BCValue
 #endif
 } STRUCT_NAME;
 
-void BCValue_Init(BCValue* self)
-{
-    self->couldBeVoid = false;
-}
+EXTERN_C void BCValue_Init(BCValue* self);
+EXTERN_C bool BCValue_eq(const BCValue* lhs, const BCValue* rhs);
 
 #undef STRUCT_NAME
 
@@ -276,7 +274,7 @@ CONSTEXPR static inline uint32_t align16(const uint32_t val)
     return ((val + 15) & ~15);
 }
 
-EXTERN_C const uint32_t basicTypeSize(const BCTypeEnum bct);
+EXTERN_C const uint32_t BCTypeEnum_basicTypeSize(const BCTypeEnum bct);
 
 EXTERN_C const uint32_t adjustmentMask(BCTypeEnum t);
 
@@ -290,11 +288,11 @@ static inline const uint32_t fastLog10(const uint32_t val)
 
 /*@unique*/
 /*
-inline static const fastPow10tbl = [
+static const fastPow10tbl = [
     1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000,
 ];
 
-const char* itos(const uint val) pure @trusted nothrow
+const char* itos(const uint val)
 {
     char* result = new char[](length);
     immutable length = fastLog10(val) + 1;
@@ -322,7 +320,7 @@ string itos64(const uint64_t val)
     return cast(string) "((" ~ hiString ~ "UL << 32)" ~ "|" ~ lwString ~ ")";
 }
 
-string sitos(const int val) pure @trusted nothrow
+string sitos(const int val)
 {
     int sign = (val < 0) ? 1 : 0;
     uint abs_val = (val < 0) ? -val : val;
@@ -362,7 +360,7 @@ EXTERN_C bool BCType_isFloat(BCType bct);
 
 EXTERN_C bool BCType_isBasicBCType(BCType bct);
 
-EXTERN_C bool BCValue_isStackValueOrParameter(BCValue val);
+EXTERN_C bool BCValue_isStackValueOrParameter(const BCValue* val);
 
 struct RegStatusList
 {
@@ -373,7 +371,7 @@ struct RegStatusList
     uint32_t dirtyBitfield;
 
 #ifdef __cplusplus
-    STRUCT_NAME(int NREGS) pure
+    STRUCT_NAME(int NREGS)
     {
         assert(NREGS < 32  /*"extending freeBitField is not yet done"*/);
         this.NREGS = NREGS;
@@ -470,7 +468,7 @@ struct RegStatusList
 
 EXTERN_C const uint8_t toParamCode(const BCValue val);
 
-static inline const int BCHeap_initHeapMax = (1 << 15);
+static const int BCHeap_initHeapMax = (1 << 15);
 
 typedef struct BCHeap
 {
@@ -479,12 +477,12 @@ typedef struct BCHeap
     uint8_t* heapData;
 } BCHeap;
 
-static inline const int heapSizeOffset = offsetof(BCHeap, heapSize);
-static inline const int heapMaxOffset = offsetof(BCHeap, heapMax);
-static inline const int heapDataOffset = offsetof(BCHeap, heapData);
+static const int heapSizeOffset = offsetof(BCHeap, heapSize);
+static const int heapMaxOffset = offsetof(BCHeap, heapMax);
+static const int heapDataOffset = offsetof(BCHeap, heapData);
 
-static inline const int heapDataPtrOffset    = offsetof(BCHeap, heapData) + sizeof(uint8_t*);
-static inline const int heapDataLengthOffset = offsetof(BCHeap, heapData) + sizeof(uint8_t*) + sizeof(void*);
+static const int heapDataPtrOffset    = offsetof(BCHeap, heapData) + sizeof(uint8_t*);
+static const int heapDataLengthOffset = offsetof(BCHeap, heapData) + sizeof(uint8_t*) + sizeof(void*);
 
 typedef struct BCLabel
 {
@@ -509,11 +507,11 @@ typedef struct BCParameter
 } BCParameter;
 
 
-#define imm32(VALUE) imm32_((VALUE), false);
+#define imm32(VALUE) imm32_((VALUE), false)
 
 EXTERN_C BCValue imm32_(uint32_t value, bool signed_);
 
-#define imm64(VALUE) imm64_((VALUE), false);
+#define imm64(VALUE) imm64_((VALUE), false)
 
 EXTERN_C BCValue imm64_(uint64_t value, bool signed_);
 
@@ -663,7 +661,7 @@ template ensureIsBCGen(BCGenT)
 }
 */
 /// commonType enum used for implicit conversion
-inline static const BCTypeEnum smallIntegerTypes[] = {BCTypeEnum_u16, BCTypeEnum_u8,
+static const BCTypeEnum smallIntegerTypes[] = {BCTypeEnum_u16, BCTypeEnum_u8,
                                       BCTypeEnum_i16, BCTypeEnum_i8,
                                       BCTypeEnum_c32, BCTypeEnum_c16, BCTypeEnum_c8};
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof(A[0]))
@@ -671,4 +669,4 @@ inline static const BCTypeEnum smallIntegerTypes[] = {BCTypeEnum_u16, BCTypeEnum
 EXTERN_C BCTypeEnum BCTypeEnum_commonTypeEnum(BCTypeEnum lhs, BCTypeEnum rhs);
 #undef offsetof
 
-static inline const BCType BCType_i32 = {BCTypeEnum_i32}; 
+static const BCType BCType_i32 = {BCTypeEnum_i32}; 

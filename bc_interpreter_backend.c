@@ -1,22 +1,25 @@
-
 /**
  * Written By Stefan Koch in 2016 - 2022
- */
+*/
  
 #include "bc_common.h"
 #include "backend_interface_funcs.h"
 
-struct RetainedCall
+#define cast(T) (T)
+
+typedef struct RetainedCall
 {
     BCValue fn;
-    BCValue[] args;
+    BCValue* args;
+    uint32_t n_args;
 
     uint callerId;
     BCAddr callerIp;
     StackAddr callerSp;
-};
+} RetainedCall;
 
-enum LongInst
+
+typedef enum LongInst
 {
     LongInst_PrintValue,
     LongInst_RelJmp,
@@ -148,7 +151,7 @@ enum LongInst
     LongInst_File,
 
     LongInst_max
-}
+} LongInst;
 
 const int InstMask = 0x7F; // mask for bit 0-6
 
@@ -172,15 +175,17 @@ const int InstMask = 0x7F; // mask for bit 0-6
 * [0-6] Instruction
 * [6-7] Unused
 * -----------------
-* [8-31]  Register (extra_data)
+* [16-32]  Register (extra_data)
 * [32-48] Register (lhs)
 * [48-64] Register (rhs) 
+
 */
 typedef struct LongInst64
 {
     uint32_t lw;
     uint32_t hi;
-// @safe pure const nothrow:
+
+#ifdef __cplusplus
     LongInst64(const LongInst LongInst_i, const BCAddr targetAddr)
     {
         lw = i;
@@ -212,14 +217,14 @@ typedef struct LongInst64
         lw = i | stackAddrOp.addr << 16;
         hi = stackAddrLhs.addr | stackAddrRhs.addr << 16;
     }
-
+#endif
 } LongInst64;
 
-static_assert(LongInst::__max__ < 0x7F);
+// static_assert(LongInst___max__ < 0x7F);
 
-static short isShortJump(const int offset)
+static short BCGen_isShortJump(const int offset)
 {
-    assert(offset != 0, "A Jump to the Jump itself is invalid");
+    assert(offset != 0);//, "A Jump to the Jump itself is invalid");
 
     const bool wasNegative = (offset < 0);
     int abs_offset = wasNegative ? offset * -1 : offset;
@@ -234,67 +239,39 @@ static short isShortJump(const int offset)
     }
 }
 
-int16_t ShortInst16(const LongInst i, const int _imm) pure @safe
+static inline int16_t BCGen_ShortInst16(const LongInst i, const int _imm)
 {
     int16_t imm = (int16_t) _imm;
     return (i | imm << 16);
 }
 
-int ShortInst16Ex(const LongInst i, ubyte ex, const short imm) pure @safe
+static inline int BCGen_ShortInst16Ex(const LongInst i, uint8_t ex, uint16_t imm)
 {
     return i | ex << 8 | imm << 16;
 }
 
-
-enum BCFunctionTypeEnum : byte
+typedef enum BCFunctionTypeEnum 
 {
-    undef,
-    Builtin,
-    Bytecode,
-    Compiled,
-}
+    BCFunctionTypeEnum_Undef,
+    BCFunctionTypeEnum_Builtin,
+    BCFunctionTypeEnum_Bytecode,
+    BCFunctionTypeEnum_Compiled,
+} BCFunctionTypeEnum;
 
-//static if (is(typeof(() { import dmd.declaration : FuncDeclaration; })))
-//{
-//    import dmd.declaration : FuncDeclaration;
-//    alias FT = FuncDeclaration;
-//}
-//else
-//{
-//    alias FT = void*;
-//}
-
-struct BCFunction
+typedef struct BCFunction
 {
     void* funcDecl;
-    uint fn;
+    uint32_t fn;
+
     BCFunctionTypeEnum type;
-    ushort nArgs;
-    ushort maxStackUsed;
+    uint16_t nArgs;
+    uint16_t maxStackUsed;
 
-    uint[] byteCode; // should be const but currently we need to assign to this;
+    uint32_t* byteCode; // should be const but currently we need to assign to this;
+    uint32_t byteCode_Size;
+} BCFunction;
 
-    //    this(void* fd, BCFunctionTypeEnum type, int nr, const int[] byteCode, uint nArgs) pure
-    //    {
-    //        this.funcDecl = fd;
-    //        this.nr = nr;
-    //        this.type = BCFunctionTypeEnum.Builtin;
-    //        this.byteCode = cast(immutable(int)[]) byteCode;
-    //        this.nArgs = nArgs;
-    //    }
-    //
-    //    this(int nr, BCValue function(const BCValue[] arguments, uint[] heapPtr) _fBuiltin,
-    //        uint nArgs) pure
-    //    {
-    //        this.nr = nr;
-    //        this.type = BCFunctionTypeEnum.Builtin;
-    //        this._fBuiltin = _fBuiltin;
-    //        this.nArgs = nArgs;
-    //    }
-    //
-}
-
-struct BCGen
+typedef struct BCGen
 {
     uint32_t byteCodeArray[8192];
     uint32_t* byteCodeArrayExtra;
@@ -305,10 +282,11 @@ struct BCGen
     uint32_t ip;
     uint32_t sp;
 
-    ubyte parameterCount;
-    ushort temporaryCount;
+    uint8_t parameterCount;
+    uint16_t temporaryCount;
+    uint32_t n_functions;
 
-    uint functionId;
+    uint32_t functionId;
     void* fd;
     bool insideFunction;
 
@@ -319,14 +297,14 @@ struct BCGen
     RetainedCall* calls;
     uint32_t callCount;
     uint32_t callCapacity;
-}
+} BCGen;
 
-enum max_call_depth = 2000;
+static const int max_call_depth = 2000;
 
 #define INITIAL_LOCALS_CAPACITY 2048
 #define INITIAL_CALLS_CAPACITY 2048
 
-void BCGen_Init(BCGen* self)
+static inline void BCGen_Init(BCGen* self)
 {
     self->byteCodeArrayExtra = 0;
     self->byteCodeCount = 0;
@@ -345,90 +323,152 @@ void BCGen_Init(BCGen* self)
 
     self->insideFunction = 0;
     self->functionId = 0;
+    self->n_functions = 0;
 
     self->calls = malloc(sizeof(RetainedCall) * INITIAL_CALLS_CAPACITY);
     self->callCount = 0;
-    self->callCapacity = INITIAL_BYTECODE_CAPACITY;
+    self->callCapacity = 0;
 }
 
-BCValue BCGen_Interpret(BCGen* self, BCValue* args, uint32_t n_args, BCHeap* heapPtr)
+
+void BCGen_new_instance(void** pResult)
 {
-    BCFunction f = BCFunction(cast(void*)fd,
+    BCGen* gen = (BCGen*) malloc(sizeof(BCGen));
+    BCGen_Init(gen);
+    *pResult = (void*)gen;
+
+    return ;
+}
+
+void BCGen_destroy_instance(void* p)
+{
+    free(p);
+}
+/*
+static inline BCValue BCGen_Interpret(BCGen* self, BCValue* args, uint32_t n_args, BCHeap* heapPtr)
+{
+    BCFunction f = {self->fd,
         1,
-        BCFunctionTypeEnum.Bytecode,
+        BCFunctionTypeEnum_Bytecode,
         self->parameterCount,
         (ushort)(self->temporaryCount + self->localCount + self->parameterCount),
         self->byteCodeArray
-    );
+    };
 
-    return BCGen_interpret_(0, args, heapPtr, &f, &calls[0]);
+    return BCGen_interpret_(0, args, n_args, heapPtr, &f, &self->calls[0]);
 }
-
-static void BCGen_emitLongInstSA(BCGen* self, const LongInst i, const StackAddr stackAddrLhs, const BCAddr targetAddr)
+*/
+static void inline BCGen_emit2_at(BCGen* self, uint32_t low, uint32_t high, uint32_t atIp)
 {
-    byteCodeArray[ip] = i | stackAddrLhs.addr << 16;
-    byteCodeArray[ip + 1] = targetAddr.addr;
-    ip += 2;
+    uint* codeP;
+    if (atIp < ARRAY_SIZE(self->byteCodeArray))
+    {
+        codeP = self->byteCodeArray + atIp;
+    }
+    else
+    {
+        atIp -= ARRAY_SIZE(self->byteCodeArray);
+        if (atIp < self->byteCodeExtraCapacity)
+        {
+            codeP = self->byteCodeArrayExtra + atIp;
+        }
+        else
+        {
+            // Code area should be expanded
+            assert (0);
+        }
+    }
+    
+    codeP[0] = low;
+    codeP[1] = high;
 }
 
-static void BCGen_emitLongInstSS(BCGen* self, const LongInst i, const StackAddr stackAddrLhs,
+static void inline BCGen_emit2(BCGen* self, uint32_t low, uint32_t high)
+{
+    uint32_t atIp = self->ip;
+    self->ip += 2;
+
+    BCGen_emit2_at(self, low, high, atIp);
+}
+
+static void inline BCGen_emitLongInstSA(BCGen* self, const LongInst i, const StackAddr stackAddrLhs, const BCAddr targetAddr)
+{
+    BCGen_emit2(self
+              , i | stackAddrLhs.addr << 16
+              , targetAddr.addr);
+    
+}
+
+static inline void BCGen_emitLongInstSS(BCGen* self, const LongInst i, const StackAddr stackAddrLhs,
     const StackAddr stackAddrRhs)
 {
-    byteCodeArray[ip] = i;
-    byteCodeArray[ip + 1] = stackAddrLhs.addr | stackAddrRhs.addr << 16;
-    ip += 2;
+    BCGen_emit2(self
+              , i
+              , stackAddrLhs.addr | stackAddrRhs.addr << 16);
 }
 
-static void BCGen_emitLongInstSI(BCGen* self, const LongInst i, const StackAddr stackAddrLhs, const Imm32 rhs)
+static inline void BCGen_emitLongInstSI(BCGen* self, const LongInst i, const StackAddr stackAddrLhs, uint32_t rhs)
 {
-    byteCodeArray[ip] = i | stackAddrLhs.addr << 16;
-    byteCodeArray[ip + 1] = rhs.imm32;
-    ip += 2;
+    BCGen_emit2(self
+              , i | stackAddrLhs.addr << 16
+              , rhs);
 }
 
-static void BCGen_emitLongInstSSS(BCGen* self, const LongInst i, const StackAddr stackAddrOp,
+static inline void BCGen_emitLongInstSSS(BCGen* self, const LongInst i, const StackAddr stackAddrOp,
     const StackAddr stackAddrLhs, const StackAddr stackAddrRhs)
 {
-    byteCodeArray[ip] = i | stackAddrOp.addr << 16;
-    byteCodeArray[ip + 1] = stackAddrLhs.addr | stackAddrRhs.addr << 16;
-    ip += 2;
+    BCGen_emit2(self
+              , i | stackAddrOp.addr << 16
+              , stackAddrLhs.addr | stackAddrRhs.addr << 16);
 }
 
-static void BCGen_emitLongInstA(const LongInst i, const BCAddr targetAddr)
+static inline void BCGen_emitLongInstA(BCGen* self, const LongInst i, const BCAddr targetAddr)
 {
-    byteCodeArray[ip] = i;
-    byteCodeArray[ip + 1] = targetAddr.addr;
-    ip += 2;
+    BCGen_emit2(self
+              , i
+              , targetAddr.addr);
 }
+
+static inline uint32_t BCGen_currSp(BCGen* self)
+{
+    return self->sp;
+}
+
+/// semi-public functions for the vtbl start here
 
 BCValue BCGen_genTemporary(BCGen* self, BCType bct)
 {
-    uint32_t tmpAddr = self->sp;
-    if (isBasicBCType(bct))
+    BCValue result;
+
+    result.type = bct;
+    result.temporaryIndex = ++self->temporaryCount;
+    result.stackAddr.addr = self->sp;
+
+    if (BCType_isBasicBCType(bct))
     {
-        self->sp += align4(basicTypeSize(bct.type));
+        self->sp += align4(BCTypeEnum_basicTypeSize(bct.type));
     }
     else
     {
         self->sp += 4;
     }
 
-    return BCValue(StackAddr(tmpAddr), bct, ++self->temporaryCount);
+    return result;
 }
 
 void BCGen_destroyTemporary(BCGen* self, BCValue tmp)
 {
-    assert(isStackValueOrParameter(tmp), "tmporary has to be stack-value");
+    assert(BCValue_isStackValueOrParameter(&tmp));//, "tmporary has to be stack-value");
     uint32_t sz;
-    if (isBasicBCType(tmp.type))
+    if (BCType_isBasicBCType(tmp.type))
     {
-        sz = align4(basicTypeSize(tmp.type.type));
+        sz = align4(BCTypeEnum_basicTypeSize(tmp.type.type));
     }
     else
     {
         sz = 4;
     }
-    if (self->sp - sz == tmp.stackAddr)
+    if (self->sp - sz == tmp.stackAddr.addr)
     {
         // this is the last thing we pushed on
         // free the stack space immediately.
@@ -436,137 +476,375 @@ void BCGen_destroyTemporary(BCGen* self, BCValue tmp)
     }
 }
 
-void BCGen_beginFunction(BCGen* self, uint fnId, void* fd)
+static inline void BCGen_Initialize(BCGen* self)
 {
+    self->callCount = 0;
+    self->parameterCount = 0;
+    self->temporaryCount = 0;
+    self->localCount = 0;
+    
+    self->byteCodeArray[0] = 0;
+    self->byteCodeArray[1] = 0;
+    self->byteCodeArray[2] = 0;
+    self->byteCodeArray[3] = 0;
+
     self->ip = 4;
-    self->insideFunction = true;
-    self->functionId = fnId;
+    self->sp = 4;
+
+    self->insideFunction = false;
+    self->fd = 0;
 }
 
-void BCGen_Initialize()
+static inline void BCGen_Finalize(BCGen* self)
 {
-    callCount = 0;
-    parameterCount = 0;
-    temporaryCount = 0;
-    localCount = 0;
-    byteCodeArray[0] = 0;
-    byteCodeArray[1] = 0;
-    byteCodeArray[2] = 0;
-    byteCodeArray[3] = 0;
-
-    ip = BCAddr(4);
-    sp = StackAddr(4);
-}
-
-void Finalize()
-{
-    callCount = 0;
+    self->callCount = 0;
     // TODO write some kind of end marker into the bytecode
 }
 
 
-
-    extern (D) BCValue genLocal(BCType bct, string name)
-    {
-        auto localAddr = sp.addr;
-        ushort localIdx = ++localCount;
-
-        if (isBasicBCType(bct))
-        {
-            sp += align4(basicTypeSize(bct.type));
-        }
-        else
-        {
-            sp += 4;
-        }
-
-        string localName = name ? name : null;
-
-        locals[localIdx - 1] = BCLocal(localIdx, bct, StackAddr(localAddr), localName);
-
-        return BCValue(StackAddr(localAddr), bct, localIdx, localName);
-    }
-
-
+static inline uint32_t BCGen_beginFunction(BCGen* self, uint32_t fnId, void* fd)
 {
+    assert(self->fd == 0);
+    
+    if (!fnId)
+        fnId = ++self->n_functions;
 
+    self->ip += 4;
+    
+    self->insideFunction = true;
+    self->functionId = fnId;
+    self->fd = fd;
 
-/*
-    string[ushort] stackMap() pure
+    return fnId;
+}
+
+static inline BCFunction BCGen_endFunction(BCGen* self, uint32_t fIdx)
+{
+    assert(self->insideFunction);
+    assert(self->functionId == fIdx);
+    self->insideFunction = false;
+    
+    self->localCount = 0;
+
+    BCFunction result = {0};
+    
+    result.type = BCFunctionTypeEnum_Bytecode;
+    result.maxStackUsed = self->sp;
+    result.fn = self->functionId;
     {
-        string[ushort] result;
-        foreach(local;locals[0 .. localCount])
-        {
-            result[local.addr] = local.name;
-        }
-        return result;
+        // MUTEX BEGIN
+        // result.byteCode = byteCodeArray[4 .. ip];
+        // MUTEX END
     }
-*/
+    self->sp = 4;
+    self->fd = 0;
 
-//pure:
-    /// The emitLongInst functions have to be kept up to date if
-    /// LongInst64 is changed.
+    return result;
+}
 
+static inline BCValue BCGen_genLocal(BCGen* self, BCType bct, const char* name)
+{
+    uint32_t sp = self->sp;
+    uint16_t localAddr = (uint16_t)sp;
+    uint16_t localIdx = ++self->localCount;
 
+    BCValue result = {0};
+    result.type = bct;
+    result.stackAddr.addr = localAddr;
+    result.localIndex  = localIdx;
+    result.vType = BCValueType_StackValue;
 
-
-
-    BCFunction endFunction()
+    if (BCType_isBasicBCType(bct))
     {
-        //assert(insideFunction);
-        //I have no idea how this can fail ...
-        localCount = 0;
-
-        insideFunction = false;
-        BCFunction result;
-        result.type = BCFunctionTypeEnum.Bytecode;
-        result.maxStackUsed = sp;
-        result.fn = functionId;
-        {
-            // MUTEX BEGIN
-            // result.byteCode = byteCodeArray[4 .. ip];
-            // MUTEX END
-        }
-        sp = StackAddr(4);
-
-        // import std.stdio; writeln("bc: ", printInstructions(byteCodeArray[4 .. ip]));
-
-        return result;
+        sp += align4(BCTypeEnum_basicTypeSize(bct.type));
     }
-
-    BCValue genParameter(BCType bct, string name = null)
+    else
     {
-        auto p = BCValue(BCParameter(++parameterCount, bct, sp));
-        p.name = name;
         sp += 4;
-        return p;
+    }
+    BCLocal local = {localIdx, bct, {localAddr}, name};
+
+    self->locals[localIdx - 1] = local;
+
+    self->sp = sp;
+    return result;
+}
+
+static inline BCValue BCGen_genParameter(BCGen* self, BCType bct, const char* name)
+{
+    BCValue p;
+
+    p.type =  bct;
+    p.vType = BCValueType_Parameter;
+    p.parameterIndex = ++self->parameterCount;
+    p.stackAddr.addr = self->sp;
+
+    self->sp += 4;
+    p.name = name;
+    
+    return p;
+}
+
+static inline uint32_t BCGen_beginJmp(BCGen* self)
+{
+    uint32_t atIp = self->ip;
+    self->ip += 2;
+
+    return atIp;
+}
+static inline void BCGen_emitArithInstruction(BCGen* self
+                                            , LongInst inst
+                                            , BCValue lhs
+                                            , BCValue rhs
+                                            , BCTypeEnum* resultTypeEnum);
+
+static inline BCValue BCGen_castTo(BCGen* self, BCValue rhs, BCTypeEnum targetType)
+{
+    BCTypeEnum sourceType = rhs.type.type;
+
+    if (sourceType == targetType)
+        return rhs;
+
+    BCType type = {targetType};
+    BCValue lhs = BCGen_genTemporary(self, type);
+
+    assert(BCValue_isStackValueOrParameter(&rhs));
+
+    switch(targetType)
+    {
+        case BCTypeEnum_f52 :
+            if (sourceType == BCTypeEnum_f23)
+                BCGen_emitLongInstSS(self, LongInst_F32ToF64, lhs.stackAddr, rhs.stackAddr);
+            else
+                BCGen_emitLongInstSS(self, LongInst_IToF64, lhs.stackAddr, rhs.stackAddr);
+        break;
+        case BCTypeEnum_f23 :
+            if (sourceType == BCTypeEnum_f52)
+                BCGen_emitLongInstSS(self, LongInst_F64ToF32, lhs.stackAddr, rhs.stackAddr);
+            else
+                BCGen_emitLongInstSS(self, LongInst_IToF32, lhs.stackAddr, rhs.stackAddr);
+        break;
+        case BCTypeEnum_i32 :
+        case BCTypeEnum_i64 :
+            if (sourceType == BCTypeEnum_f23)
+                BCGen_emitLongInstSS(self, LongInst_F32ToI, lhs.stackAddr, rhs.stackAddr);
+            else if (sourceType == BCTypeEnum_f52)
+                BCGen_emitLongInstSS(self, LongInst_F64ToI, lhs.stackAddr, rhs.stackAddr);
+        break;
+        default :
+            assert(0); //, "me no have no cast for targetType " ~ enumToString(targetType));}
+        //break;
     }
 
-    BCAddr beginJmp()
+    return lhs;
+}
+
+void BCGen_Set(BCGen* self, BCValue lhs, BCValue rhs)
+{
+    assert(BCValue_isStackValueOrParameter(&lhs));//, "Set lhs is has to be a StackValue. Not: " ~ enumToString(lhs.vType));
+    assert(rhs.vType == BCValueType_Immediate || BCValue_isStackValueOrParameter(&rhs));//, "Set rhs is has to be a StackValue or Imm not: " ~ rhs.vType.enumToString);
+
+    if (rhs.vType == BCValueType_Immediate && (rhs.type.type == BCTypeEnum_i64 || rhs.type.type == BCTypeEnum_u64 || rhs.type.type == BCTypeEnum_f52))
     {
-        BCAddr atIp = ip;
-        ip += 2;
-        return atIp;
+        BCGen_emitLongInstSI(self, LongInst_SetImm32, lhs.stackAddr, (rhs.imm64.imm64 & UINT32_MAX));
+        if ((((rhs.type.type == BCTypeEnum_u64 || rhs.type.type == BCTypeEnum_i64)) && rhs.imm64.imm64 > UINT32_MAX) || rhs.type.type == BCTypeEnum_f52) // if there are high bits
+            BCGen_emitLongInstSI(self, LongInst_SetHighImm32, lhs.stackAddr, (rhs.imm64.imm64 >> 32));
     }
 
-    StackAddr currSp()
+    else if (!BCValue_eq(&lhs, &rhs)) // do not emit self assignments;
     {
-        return sp;
+        BCGen_emitArithInstruction(self, LongInst_Set, lhs, rhs, 0);
+    }
+}
+
+static inline BCValue BCGen_pushOntoStack(BCGen* self, BCValue val)
+{
+    if (!BCValue_isStackValueOrParameter(&val))
+    {
+        BCValue stackref;
+        stackref.type = val.type;
+        stackref.vType = BCValueType_StackValue;
+        stackref.stackAddr.addr = BCGen_currSp(self);
+
+        assert(BCValue_isStackValueOrParameter(&stackref));
+        BCGen_Set(self, u32(stackref), val);
+
+        self->sp += align4(BCTypeEnum_basicTypeSize(val.type.type));
+        return stackref;
+    }
+    else
+    {
+        return val;
+    }
+}
+
+
+static inline void BCGen_emitArithInstruction(BCGen* self
+                                            , LongInst inst
+                                            , BCValue lhs
+                                            , BCValue rhs
+                                            , BCTypeEnum* resultTypeEnum)
+{
+    assert(inst >= LongInst_Add && inst < LongInst_ImmAdd); //,
+//        "Instruction is not in Range for Arith Instructions");
+
+    BCTypeEnum commonType = BCTypeEnum_commonTypeEnum(lhs.type.type, rhs.type.type);
+
+    // FIXME Implement utf8 <-> utf32 conversion
+    assert(commonType == BCTypeEnum_i32 || commonType == BCTypeEnum_i64
+        || commonType == BCTypeEnum_u32 || commonType == BCTypeEnum_u64
+        || commonType == BCTypeEnum_f23 || commonType == BCTypeEnum_c32
+        || commonType == BCTypeEnum_c8  || commonType == BCTypeEnum_f52);//,
+    //    "only i32, i64, f23, f52, is supported for now not: " ~ enumToString(commonType));
+    //assert(lhs.type.type == rhs.type.type, enumToString(lhs.type.type) ~ " != " ~ enumToString(rhs.type.type));
+
+    if (lhs.vType == BCValueType_Immediate)
+    {
+        lhs = BCGen_pushOntoStack(self, lhs);
     }
 
-    void endJmp(BCAddr atIp, BCLabel target)
+    if (resultTypeEnum)
+        *resultTypeEnum = commonType;
+
+    if (lhs.type.type == BCTypeEnum_f23)
     {
-        auto offset = isShortJump(target.addr - atIp);
-        if (offset)
+        if(rhs.type.type == BCTypeEnum_i32 || rhs.type.type == BCTypeEnum_u32)
         {
-            byteCodeArray[atIp] = ShortInst16(LongInst_RelJmp, offset);
+            if (rhs.vType == BCValueType_Immediate)
+            {
+                float frhs = (float) rhs.imm32.imm32;
+                rhs = imm32(*(int32_t*)&frhs);
+            }
+            else
+                rhs = BCGen_castTo(self, rhs, BCTypeEnum_f23);
+        }
+        else if (rhs.type.type == BCTypeEnum_f23)
+        {
+            rhs = BCGen_pushOntoStack(self, rhs);
+        }
+        else if (rhs.type.type == BCTypeEnum_f52)
+        {
+            rhs = BCGen_castTo(self, rhs, lhs.type.type);
+        }
+        else
+            assert(0);//, "did not expect type " ~ enumToString(rhs.type.type) ~ "to be used in a float expression");
+        if (inst != LongInst_Set)
+        {
+            inst += (LongInst_FAdd32 - LongInst_Add);
+        }
+    }
+    else if (lhs.type.type == BCTypeEnum_f52)
+    {
+        if(rhs.type.type != BCTypeEnum_f52)
+        {
+            // TOOD there was
+            // assert (rhs.type.type == BCTypeEnum_f52)
+            // here before .... check if this is an invariant
+            rhs = BCGen_castTo(self, rhs, BCTypeEnum_f52);
+        }
+
+        rhs = BCGen_pushOntoStack(self, rhs);
+        if (inst != LongInst_Set)
+        {
+            inst += (LongInst_FAdd64 - LongInst_Add);
+        }
+    }
+    else if (rhs.vType == BCValueType_Immediate)
+    {
+        const int64_t imm64s = (BCTypeEnum_basicTypeSize(rhs.type.type) == 8 ? cast(int64_t)rhs.imm64.imm64 : 0);
+        if  (BCTypeEnum_basicTypeSize(rhs.type.type) <= 4 || (imm64s <= INT32_MAX && imm64s > -INT32_MAX))
+        {
+            //Change the instruction into the corresponding Imm Instruction;
+            if (inst != LongInst_Set)
+            {
+                inst += (LongInst_ImmAdd - LongInst_Add);
+            }
+            else
+            {
+                inst = LongInst_SetImm32;
+            }
+            BCGen_emitLongInstSI(self, inst, lhs.stackAddr, rhs.imm32.imm32);
+            return ;
         }
         else
         {
-            byteCodeArray[atIp] = LongInst_Jmp;
-            byteCodeArray[atIp + 1] = target.addr;
+            rhs = BCGen_pushOntoStack(self, rhs);
         }
     }
+
+    if (BCValue_isStackValueOrParameter(&rhs))
+    {
+        BCGen_emitLongInstSS(self, inst, lhs.stackAddr, rhs.stackAddr);
+    }
+    else
+    {
+        assert(0);//, "Cannot handle: " ~ enumToString(rhs.vType));
+    }
+}
+
+static inline void BCGen_Add3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType != BCValueType_Immediate); //, "Cannot add to Immediate");
+
+    result = (result.vType != BCValueType_Unknown ? result : lhs);
+    if (!BCValue_eq(&lhs, &result))
+    {
+        BCGen_Set(self, result, lhs);
+    }
+
+    BCGen_emitArithInstruction(self, LongInst_Add, result, rhs, &result.type.type);
+}
+
+static inline void BCGen_Ret(BCGen*self, BCValue val)
+{
+    LongInst inst = BCTypeEnum_basicTypeSize(val.type.type) == 8 ? LongInst_Ret64 : LongInst_Ret32;
+    val = BCGen_pushOntoStack(self, val);
+
+    if (BCValue_isStackValueOrParameter(&val))
+    {
+        BCGen_emit2(self, BCGen_ShortInst16(inst, val.stackAddr.addr), 0);
+    }
+    else
+    {
+        assert(0);//, "I cannot deal with this type of return" ~ enumToString(val.vType));
+    }
+}
+
+EXTERN_C BackendInterface BCGen_newInterface(void)
+{
+    BackendInterface result = {
+        .Initialize = cast(Initialize_t) BCGen_Initialize,
+        .Finalize = cast(Finalize_t) BCGen_Finalize,
+        .beginFunction = cast(beginFunction_t) BCGen_beginFunction,
+        .endFunction = cast(endFunction_t) BCGen_endFunction,
+        .genParameter = cast(genLocal_t) BCGen_genParameter,
+        .genLocal = cast(genLocal_t) BCGen_genLocal,
+
+        .Add3 = cast(Add3_t) BCGen_Add3,
+        .Ret = cast(Ret_t) BCGen_Ret,
+
+        .new_instance = (new_instance_t) BCGen_new_instance,
+        .destroy_instance = (destroy_instance_t) BCGen_destroy_instance
+    };
+    return result;
+}
+
+void endJmp(BCGen* self, BCAddr atIp, BCLabel target)
+{
+    uint16_t offset = BCGen_isShortJump(target.addr.addr - atIp.addr);
+    if (offset)
+    {
+        BCGen_emit2_at(self, BCGen_ShortInst16(LongInst_RelJmp, offset), 0, atIp.addr);
+    }
+    else
+    {
+        BCGen_emit2_at(self, LongInst_Jmp, target.addr.addr, atIp.addr);
+    }
+}
+
+#if 0
+/*
+{    
 
     BCLabel genLabel()
     {
@@ -593,7 +871,7 @@ void Finalize()
 
         LongInst64 lj;
 
-        if (isStackValueOrParameter(cond))
+        if (BCValue_isStackValueOrParameter(&cond))
         {
             lj = (ifTrue ? LongInst64(LongInst_JmpNZ, cond.stackAddr,
                 target.addr) : LongInst64(LongInst_JmpZ, cond.stackAddr, target.addr));
@@ -620,7 +898,7 @@ void Finalize()
 
     void emitFlg(BCValue lhs)
     {
-        assert(isStackValueOrParameter(lhs), "Can only store flags in Stack Values");
+        assert(BCValue_isStackValueOrParameter(&lhs))//, "Can only store flags in Stack Values");
         byteCodeArray[ip] = ShortInst16(LongInst_Flg, lhs.stackAddr.addr);
         byteCodeArray[ip + 1] = 0;
         ip += 2;
@@ -628,28 +906,28 @@ void Finalize()
 
     void Alloc(BCValue heapPtr, BCValue size, uint line = __LINE__)
     {
-        assert(size.type.type == BCTypeEnum.u32, "Size for alloc needs to be an u32" ~ " called by:" ~ itos(line));
+        assert(size.type.type == BCTypeEnum_u32)//, "Size for alloc needs to be an u32" ~ " called by:" ~ itos(line));
         if (size.vType == BCValueType.Immediate)
         {
             size = pushOntoStack(size);
         }
-        assert(isStackValueOrParameter(size));
-        assert(isStackValueOrParameter(heapPtr));
+        assert(BCValue_isStackValueOrParameter(&size));
+        assert(BCValue_isStackValueOrParameter(&heapPtr));
 
-        emitLongInst(LongInst_Alloc, heapPtr.stackAddr, size.stackAddr);
+        BCGen_emitLongInstSS(self, LongInst_Alloc, heapPtr.stackAddr, size.stackAddr);
     }
 
     void Assert(BCValue value, BCValue err, uint l = __LINE__)
     {
         BCValue _msg;
-        if (isStackValueOrParameter(err))
+        if (BCValue_isStackValueOrParameter(&err))
         {
-            assert(0, "err.vType is not Error but: " ~ enumToString(err.vType));
+            assert(0);//, "err.vType is not Error but: " ~ enumToString(err.vType));
         }
 
         if (value)
         {
-            emitLongInst(LongInst_Assert, pushOntoStack(value).stackAddr, err.imm32);
+            emitLongInst(LongInst_Assert, pushOntoStack(value).stackAddr, imm32(err));
         }
         else
         {
@@ -664,7 +942,7 @@ void Finalize()
         src = pushOntoStack(src);
         dst = pushOntoStack(dst);
 
-        emitLongInst(LongInst_MemCpy, size.stackAddr, dst.stackAddr, src.stackAddr);
+        BCGen_emitLongInstSS(self, LongInst_MemCpy, size.stackAddr, dst.stackAddr, src.stackAddr);
     }
 
 
@@ -729,7 +1007,7 @@ void Finalize()
         {
             uint commentLength = cast(uint) comment.length;
 
-            emitLongInst(LongInst_Comment, StackAddr.init, Imm32(commentLength));
+            emitLongInstSI(LongInst_Comment, StackAddr.init, commentLength);
 
             outputBytes(comment);
         }
@@ -760,133 +1038,11 @@ void Finalize()
         ip += 2;
     }
 
-    void emitArithInstruction(LongInst inst, BCValue lhs, BCValue rhs, BCTypeEnum* resultTypeEnum = null)
-    {
-        assert(inst >= LongInst_Add && inst < LongInst_ImmAdd,
-            "Instruction is not in Range for Arith Instructions");
-
-        BCTypeEnum commonType = commonTypeEnum(lhs.type.type, rhs.type.type);
-
-        // FIXME Implement utf8 <-> utf32 conversion
-        assert(commonType == BCTypeEnum.i32 || commonType == BCTypeEnum.i64
-            || commonType == BCTypeEnum.u32 || commonType == BCTypeEnum.u64
-            || commonType == BCTypeEnum.f23 || commonType == BCTypeEnum.c32
-            || commonType == BCTypeEnum.c8  || commonType == BCTypeEnum.f52,
-            "only i32, i64, f23, f52, is supported for now not: " ~ enumToString(commonType));
-        //assert(lhs.type.type == rhs.type.type, enumToString(lhs.type.type) ~ " != " ~ enumToString(rhs.type.type));
-
-        if (lhs.vType == BCValueType.Immediate)
-        {
-            lhs = pushOntoStack(lhs);
-        }
-
-        if (resultTypeEnum !is null)
-            *resultTypeEnum = commonType;
-
-        if (lhs.type.type == BCTypeEnum.f23)
-        {
-            if(rhs.type.type == BCTypeEnum.i32 || rhs.type.type == BCTypeEnum.u32)
-            {
-                if (rhs.vType == BCValueType.Immediate)
-                () @trusted {
-                    float frhs = float(rhs.imm32);
-                    rhs = imm32(*cast(int*)&frhs);
-                } ();
-                else
-                    rhs = castTo(rhs, BCTypeEnum.f23);
-            }
-            else if (rhs.type.type == BCTypeEnum.f23)
-            {
-                rhs = pushOntoStack(rhs);
-            }
-            else if (rhs.type.type == BCTypeEnum.f52)
-            {
-                rhs = castTo(rhs, lhs.type.type);
-            }
-            else
-                assert(0, "did not expect type " ~ enumToString(rhs.type.type) ~ "to be used in a float expression");
-            if (inst != LongInst_Set)
-            {
-                // if (!__ctfe) () @trusted { printf("newInst: %s\n", enumToString(inst).ptr); } ();
-                inst += (LongInst_FAdd32 - LongInst_Add);
-                // if (!__ctfe) () @trusted { printf("newInst: %s\n", enumToString(inst).ptr); } ();
-            }
-        }
-        else if (lhs.type.type == BCTypeEnum.f52)
-        {
-            if(rhs.type.type != BCTypeEnum.f52)
-            {
-                // TOOD there was
-                // assert (rhs.type.type == BCTypeEnum.f52)
-                // here before .... check if this is an invariant
-                rhs = castTo(rhs, BCTypeEnum.f52);
-            }
-
-            rhs = pushOntoStack(rhs);
-            if (inst != LongInst_Set)
-            {
-                // if (!__ctfe) () @trusted { printf("newInst: %s\n", enumToString(inst).ptr); } ();
-                inst += (LongInst_FAdd64 - LongInst_Add);
-                // if (!__ctfe) () @trusted { printf("newInst: %s\n", enumToString(inst).ptr); } ();
-            }
-        }
-        else if (rhs.vType == BCValueType.Immediate)
-        {
-            const imm64s = (basicTypeSize(rhs.type.type) == 8 ? cast(long)rhs.imm64 : 0);
-            if  (basicTypeSize(rhs.type.type) <= 4 || (imm64s <= int.max && imm64s > -int.max))
-            {
-                //Change the instruction into the corresponding Imm Instruction;
-                if (inst != LongInst_Set)
-                {
-                    // if (!__ctfe) () @trusted { printf("newInst: %s\n", enumToString(inst).ptr); } ();
-                    inst += (LongInst_ImmAdd - LongInst_Add);
-                    // if (!__ctfe) () @trusted { printf("newInst: %s\n", enumToString(inst).ptr); } ();
-                }
-                else
-                {
-                    inst = LongInst_SetImm32;
-                }
-                emitLongInst(inst, lhs.stackAddr, rhs.imm32);
-                return ;
-            }
-            else
-            {
-                rhs = pushOntoStack(rhs);
-            }
-        }
-
-        if (isStackValueOrParameter(rhs))
-        {
-            emitLongInst(inst, lhs.stackAddr, rhs.stackAddr);
-        }
-        else
-        {
-            assert(0, "Cannot handle: " ~ enumToString(rhs.vType));
-        }
-    }
-
-    void Set(BCValue lhs, BCValue rhs)
-    {
-        assert(isStackValueOrParameter(lhs), "Set lhs is has to be a StackValue. Not: " ~ enumToString(lhs.vType));
-        assert(rhs.vType == BCValueType.Immediate || isStackValueOrParameter(rhs), "Set rhs is has to be a StackValue or Imm not: " ~ rhs.vType.enumToString);
-
-        if (rhs.vType == BCValueType.Immediate && (rhs.type.type == BCTypeEnum.i64 || rhs.type.type == BCTypeEnum.u64 || rhs.type.type == BCTypeEnum.f52))
-        {
-            emitLongInst(LongInst_SetImm32, lhs.stackAddr, imm32(rhs.imm64 & uint.max).imm32);
-            if ((((rhs.type.type == BCTypeEnum.u64 || rhs.type.type == BCTypeEnum.i64)) && rhs.imm64 > uint.max) || rhs.type.type == BCTypeEnum.f52) // if there are high bits
-                emitLongInst(LongInst_SetHighImm32, lhs.stackAddr, Imm32(rhs.imm64 >> 32));
-        }
-
-        else if (lhs != rhs) // do not emit self assignments;
-        {
-            emitArithInstruction(LongInst_Set, lhs, rhs);
-        }
-    }
-
+    
     void SetHigh(BCValue lhs, BCValue rhs)
     {
-        assert(isStackValueOrParameter(lhs), "SetHigh lhs is has to be a StackValue");
-        assert(rhs.vType == BCValueType.Immediate || isStackValueOrParameter(rhs), "SetHigh rhs is has to be a StackValue or Imm");
+        assert(BCValue_isStackValueOrParameter(&lhs), "SetHigh lhs is has to be a StackValue");
+        assert(rhs.vType == BCValueType.Immediate || BCValue_isStackValueOrParameter(&rhs), "SetHigh rhs is has to be a StackValue or Imm");
         assert(0, "SetHigh is not implemented");
         //two cases :
         //    lhs.type.size == 4 && rhs.type.size == 8
@@ -898,11 +1054,11 @@ void Finalize()
     void Ult3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(result.vType == BCValueType.Unknown
-            || isStackValueOrParameter(result),
+            || BCValue_isStackValueOrParameter(&result),
             "The result for this must be Empty or a StackValue");
-        emitArithInstruction(LongInst_Ult, lhs, rhs);
+        emitArithInstruction(LongInst_Ult, lhs, rhs, null);
 
-        if (isStackValueOrParameter(result))
+        if (BCValue_isStackValueOrParameter(&result))
         {
             emitFlg(result);
         }
@@ -911,11 +1067,11 @@ void Finalize()
     void Ule3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(result.vType == BCValueType.Unknown
-            || isStackValueOrParameter(result),
+            || BCValue_isStackValueOrParameter(&result),
             "The result for this must be Empty or a StackValue");
         emitArithInstruction(LongInst_Ule, lhs, rhs);
 
-        if (isStackValueOrParameter(result))
+        if (BCValue_isStackValueOrParameter(&result))
         {
             emitFlg(result);
         }
@@ -924,11 +1080,11 @@ void Finalize()
     void Lt3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(result.vType == BCValueType.Unknown
-            || isStackValueOrParameter(result),
+            || BCValue_isStackValueOrParameter(&result),
             "The result for this must be Empty or a StackValue");
         emitArithInstruction(LongInst_Lt, lhs, rhs);
 
-        if (isStackValueOrParameter(result))
+        if (BCValue_isStackValueOrParameter(&result))
         {
             emitFlg(result);
         }
@@ -937,11 +1093,11 @@ void Finalize()
     void Le3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(result.vType == BCValueType.Unknown
-            || isStackValueOrParameter(result),
+            || BCValue_isStackValueOrParameter(&result),
             "The result for this must be Empty or a StackValue");
         emitArithInstruction(LongInst_Le, lhs, rhs);
 
-        if (isStackValueOrParameter(result))
+        if (BCValue_isStackValueOrParameter(&result))
         {
             emitFlg(result);
         }
@@ -950,10 +1106,10 @@ void Finalize()
     void Ugt3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(result.vType == BCValueType.Unknown
-            || isStackValueOrParameter(result),
+            || BCValue_isStackValueOrParameter(&result),
             "The result for this must be Empty or a StackValue");
         emitArithInstruction(LongInst_Ugt, lhs, rhs);
-        if (isStackValueOrParameter(result))
+        if (BCValue_isStackValueOrParameter(&result))
         {
             emitFlg(result);
         }
@@ -962,10 +1118,10 @@ void Finalize()
     void Uge3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(result.vType == BCValueType.Unknown
-            || isStackValueOrParameter(result),
+            || BCValue_isStackValueOrParameter(&result),
             "The result for this must be Empty or a StackValue");
         emitArithInstruction(LongInst_Uge, lhs, rhs);
-        if (isStackValueOrParameter(result))
+        if (BCValue_isStackValueOrParameter(&result))
         {
             emitFlg(result);
         }
@@ -974,10 +1130,10 @@ void Finalize()
     void Gt3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(result.vType == BCValueType.Unknown
-            || isStackValueOrParameter(result),
+            || BCValue_isStackValueOrParameter(&result),
             "The result for this must be Empty or a StackValue");
         emitArithInstruction(LongInst_Gt, lhs, rhs);
-        if (isStackValueOrParameter(result))
+        if (BCValue_isStackValueOrParameter(&result))
         {
             emitFlg(result);
         }
@@ -986,10 +1142,10 @@ void Finalize()
     void Ge3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(result.vType == BCValueType.Unknown
-            || isStackValueOrParameter(result),
+            || BCValue_isStackValueOrParameter(&result),
             "The result for this must be Empty or a StackValue");
         emitArithInstruction(LongInst_Ge, lhs, rhs);
-        if (isStackValueOrParameter(result))
+        if (BCValue_isStackValueOrParameter(&result))
         {
             emitFlg(result);
         }
@@ -998,11 +1154,11 @@ void Finalize()
     void Eq3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(result.vType == BCValueType.Unknown
-            || isStackValueOrParameter(result),
+            || BCValue_isStackValueOrParameter(&result),
             "The result for this must be Empty or a StackValue not " ~ enumToString(result.vType) );
         emitArithInstruction(LongInst_Eq, lhs, rhs);
 
-        if (isStackValueOrParameter(result))
+        if (BCValue_isStackValueOrParameter(&result))
         {
             emitFlg(result);
         }
@@ -1011,27 +1167,14 @@ void Finalize()
     void Neq3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(result.vType == BCValueType.Unknown
-            || isStackValueOrParameter(result),
+            || BCValue_isStackValueOrParameter(&result),
             "The result for this must be Empty or a StackValue");
         emitArithInstruction(LongInst_Neq, lhs, rhs);
 
-        if (isStackValueOrParameter(result))
+        if (BCValue_isStackValueOrParameter(&result))
         {
             emitFlg(result);
         }
-    }
-
-    void Add3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType != BCValueType.Immediate, "Cannot add to Immediate");
-
-        result = (result ? result : lhs);
-        if (lhs != result)
-        {
-            Set(result, lhs);
-        }
-
-        emitArithInstruction(LongInst_Add, result, rhs, &result.type.type);
     }
 
     void Sub3(BCValue result, BCValue lhs, BCValue rhs)
@@ -1095,7 +1238,7 @@ void Finalize()
         {
             Set(result, lhs);
         }
-        if (lhs.type.type == BCTypeEnum.i32 && rhs.type.type == BCTypeEnum.i32)
+        if (lhs.type.type == BCTypeEnum_i32 && rhs.type.type == BCTypeEnum_i32)
             emitArithInstruction(LongInst_And32, result, rhs);
         else
             emitArithInstruction(LongInst_And, result, rhs);
@@ -1124,7 +1267,7 @@ void Finalize()
         {
             Set(result, lhs);
         }
-        if (lhs.type.type == BCTypeEnum.i32 && rhs.type.type == BCTypeEnum.i32)
+        if (lhs.type.type == BCTypeEnum_i32 && rhs.type.type == BCTypeEnum_i32)
             emitArithInstruction(LongInst_Xor32, result, rhs);
         else
             emitArithInstruction(LongInst_Xor, result, rhs);
@@ -1187,203 +1330,145 @@ void Finalize()
 
     void Load8(BCValue _to, BCValue from)
     {
-        if (!isStackValueOrParameter(from))
+        if (!BCValue_isStackValueOrParameter(&from))
         {
             from = pushOntoStack(from);
         }
-        if (!isStackValueOrParameter(_to))
+        if (!BCValue_isStackValueOrParameter(&_to))
         {
             _to = pushOntoStack(_to);
         }
-        assert(isStackValueOrParameter(_to), "to has the vType " ~ enumToString(_to.vType));
-        assert(isStackValueOrParameter(from), "from has the vType " ~ enumToString(from.vType));
+        assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
+        assert(BCValue_isStackValueOrParameter(&from), "from has the vType " ~ enumToString(from.vType));
         
         emitLongInst(LongInst_HeapLoad8, _to.stackAddr, from.stackAddr);
     }
 
     void Store8(BCValue _to, BCValue value)
     {
-        if (!isStackValueOrParameter(value))
+        if (!BCValue_isStackValueOrParameter(&value))
         {
             value = pushOntoStack(value);
         }
 
-        if (!isStackValueOrParameter(_to))
+        if (!BCValue_isStackValueOrParameter(&_to))
         {
             _to = pushOntoStack(_to);
         }
 
-        assert(isStackValueOrParameter(_to), "to has the vType " ~ enumToString(_to.vType));
-        assert(isStackValueOrParameter(value), "value has the vType " ~ enumToString(value.vType));
+        assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
+        assert(BCValue_isStackValueOrParameter(&value), "value has the vType " ~ enumToString(value.vType));
 
         emitLongInst(LongInst_HeapStore8, _to.stackAddr, value.stackAddr);
     }
 
     void Load16(BCValue _to, BCValue from)
     {
-        if (!isStackValueOrParameter(from))
+        if (!BCValue_isStackValueOrParameter(&from))
         {
             from = pushOntoStack(from);
         }
-        if (!isStackValueOrParameter(_to))
+        if (!BCValue_isStackValueOrParameter(&_to))
         {
             _to = pushOntoStack(_to);
         }
-        assert(isStackValueOrParameter(_to), "to has the vType " ~ enumToString(_to.vType));
-        assert(isStackValueOrParameter(from), "from has the vType " ~ enumToString(from.vType));
+        assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
+        assert(BCValue_isStackValueOrParameter(&from), "from has the vType " ~ enumToString(from.vType));
         
         emitLongInst(LongInst_HeapLoad16, _to.stackAddr, from.stackAddr);
     }
     
     void Store16(BCValue _to, BCValue value)
     {
-        if (!isStackValueOrParameter(value))
+        if (!BCValue_isStackValueOrParameter(&value))
         {
             value = pushOntoStack(value);
         }
         
-        if (!isStackValueOrParameter(_to))
+        if (!BCValue_isStackValueOrParameter(&_to))
         {
             _to = pushOntoStack(_to);
         }
         
-        assert(isStackValueOrParameter(_to), "to has the vType " ~ enumToString(_to.vType));
-        assert(isStackValueOrParameter(value), "value has the vType " ~ enumToString(value.vType));
+        assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
+        assert(BCValue_isStackValueOrParameter(&value), "value has the vType " ~ enumToString(value.vType));
         
         emitLongInst(LongInst_HeapStore16, _to.stackAddr, value.stackAddr);
     }
 
     void Load32(BCValue _to, BCValue from)
     {
-        if (!isStackValueOrParameter(from))
+        if (!BCValue_isStackValueOrParameter(&from))
         {
             from = pushOntoStack(from);
         }
         
-        if (!isStackValueOrParameter(_to))
+        if (!BCValue_isStackValueOrParameter(&_to))
         {
             _to = pushOntoStack(_to);
         }
         
-        assert(isStackValueOrParameter(_to), "to has the vType " ~ enumToString(_to.vType));
-        assert(isStackValueOrParameter(from), "from has the vType " ~ enumToString(from.vType));
+        assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
+        assert(BCValue_isStackValueOrParameter(&from), "from has the vType " ~ enumToString(from.vType));
         
         emitLongInst(LongInst_HeapLoad32, _to.stackAddr, from.stackAddr);
     }
 
     void Store32(BCValue _to, BCValue value)
     {
-        if (!isStackValueOrParameter(value))
+        if (!BCValue_isStackValueOrParameter(&value))
         {
             value = pushOntoStack(value);
         }
 
-        if (!isStackValueOrParameter(_to))
+        if (!BCValue_isStackValueOrParameter(&_to))
         {
             _to = pushOntoStack(_to);
         }
 
-        assert(isStackValueOrParameter(_to), "to has the vType " ~ enumToString(_to.vType));
-        assert(isStackValueOrParameter(value), "value has the vType " ~ enumToString(value.vType));
+        assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
+        assert(BCValue_isStackValueOrParameter(&value), "value has the vType " ~ enumToString(value.vType));
 
         emitLongInst(LongInst_HeapStore32, _to.stackAddr, value.stackAddr);
     }
 
     void Load64(BCValue _to, BCValue from)
     {
-        if (!isStackValueOrParameter(from))
+        if (!BCValue_isStackValueOrParameter(&from))
         {
             from = pushOntoStack(from);
         }
-        if (!isStackValueOrParameter(_to))
+        if (!BCValue_isStackValueOrParameter(&_to))
         {
             _to = pushOntoStack(_to);
         }
-        assert(isStackValueOrParameter(_to), "to has the vType " ~ enumToString(_to.vType));
-        assert(isStackValueOrParameter(from), "from has the vType " ~ enumToString(from.vType));
+        assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
+        assert(BCValue_isStackValueOrParameter(&from), "from has the vType " ~ enumToString(from.vType));
 
         emitLongInst(LongInst_HeapLoad64, _to.stackAddr, from.stackAddr);
     }
 
     void Store64(BCValue _to, BCValue value)
     {
-        if (!isStackValueOrParameter(value))
+        if (!BCValue_isStackValueOrParameter(&value))
         {
             value = pushOntoStack(value);
         }
-        if (!isStackValueOrParameter(_to))
+        if (!BCValue_isStackValueOrParameter(&_to))
 
         {
             _to = pushOntoStack(_to);
         }
 
-        assert(isStackValueOrParameter(_to), "to has the vType " ~ enumToString(_to.vType));
-        assert(isStackValueOrParameter(value), "value has the vType " ~ enumToString(value.vType));
+        assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
+        assert(BCValue_isStackValueOrParameter(&value), "value has the vType " ~ enumToString(value.vType));
 
         emitLongInst(LongInst_HeapStore64, _to.stackAddr, value.stackAddr);
     }
 
-
-    BCValue castTo(BCValue rhs, BCTypeEnum targetType)
-    {
-        auto sourceType = rhs.type.type;
-
-        if (sourceType == targetType)
-            return rhs;
-
-        auto lhs = genTemporary(BCType(targetType));
-
-        assert(isStackValueOrParameter(rhs));
-
-        switch(targetType) with (BCTypeEnum)
-        {
-            case f52 :
-                if (sourceType == f23)
-                    emitLongInst(LongInst_F32ToF64, lhs.stackAddr, rhs.stackAddr);
-                else
-                    emitLongInst(LongInst_IToF64, lhs.stackAddr, rhs.stackAddr);
-            break;
-            case f23 :
-                if (sourceType == f52)
-                    emitLongInst(LongInst_F64ToF32, lhs.stackAddr, rhs.stackAddr);
-                else
-                    emitLongInst(LongInst_IToF32, lhs.stackAddr, rhs.stackAddr);
-            break;
-            case i32,i64 :
-                if (sourceType == f23)
-                    emitLongInst(LongInst_F32ToI, lhs.stackAddr, rhs.stackAddr);
-                else if (sourceType == f52)
-                    emitLongInst(LongInst_F64ToI, lhs.stackAddr, rhs.stackAddr);
-            break;
-            default :
-                debug{assert(0, "me no have no cast for targetType " ~ enumToString(targetType));}
-            //break;
-        }
-
-        return lhs;
-    }
-
-    BCValue pushOntoStack(BCValue val)
-    {
-        if (!__ctfe) debug { import std.stdio; writeln("pushOntoStack: ", val); }
-        if (!isStackValueOrParameter(val))
-        {
-            auto stackref = BCValue(currSp(), val.type);
-            assert(isStackValueOrParameter(stackref));
-            Set(stackref.u32, val);
-
-            sp += align4(basicTypeSize(val.type.type));
-            return stackref;
-        }
-        else
-        {
-            return val;
-        }
-    }
-
     void Throw(BCValue e)
     {
-        assert(isStackValueOrParameter(e));
+        assert(BCValue_isStackValueOrParameter(&e));
         byteCodeArray[ip] = ShortInst16(LongInst_Throw, e.stackAddr);
         byteCodeArray[ip + 1] = 0;
         ip += 2;
@@ -1403,25 +1488,10 @@ void Finalize()
         ip += 2;
     }
 
-    void Ret(BCValue val)
-    {
-        LongInst inst = basicTypeSize(val.type.type) == 8 ? LongInst_Ret64 : LongInst_Ret32;
-        val = pushOntoStack(val);
-        if (isStackValueOrParameter(val))
-        {
-            byteCodeArray[ip] = ShortInst16(inst, val.stackAddr);
-            byteCodeArray[ip + 1] = 0;
-            ip += 2;
-        }
-        else
-        {
-            assert(0, "I cannot deal with this type of return" ~ enumToString(val.vType));
-        }
-    }
 /+
     void Push(BCValue v)
     {
-        const sz = basicTypeSize(v.typ.type);
+        const sz = BCTypeEnum_basicTypeSize(v.typ.type);
         assert(sz >= 1 && sz <= 4);
         if (v.vType == BCValueType.Immediate)
         {
@@ -1438,40 +1508,40 @@ void Finalize()
 +/
     void IToF32(BCValue result, BCValue rhs)
     {
-        assert(isStackValueOrParameter(result));
-        assert(isStackValueOrParameter(rhs));
+        assert(BCValue_isStackValueOrParameter(&result));
+        assert(BCValue_isStackValueOrParameter(&rhs));
 
         emitLongInst(LongInst_IToF32, result.stackAddr, rhs.stackAddr);
     }
 
     void IToF64(BCValue result, BCValue rhs)
     {
-        assert(isStackValueOrParameter(result));
-        assert(isStackValueOrParameter(rhs));
+        assert(BCValue_isStackValueOrParameter(&result));
+        assert(BCValue_isStackValueOrParameter(&rhs));
 
         emitLongInst(LongInst_IToF64, result.stackAddr, rhs.stackAddr);
     }
 
     void F32ToI(BCValue result, BCValue rhs)
     {
-        assert(isStackValueOrParameter(result));
-        assert(isStackValueOrParameter(rhs));
+        assert(BCValue_isStackValueOrParameter(&result));
+        assert(BCValue_isStackValueOrParameter(&rhs));
 
         emitLongInst(LongInst_F32ToI, result.stackAddr, rhs.stackAddr);
     }
 
     void F64ToI(BCValue result, BCValue rhs)
     {
-        assert(isStackValueOrParameter(result));
-        assert(isStackValueOrParameter(rhs));
+        assert(BCValue_isStackValueOrParameter(&result));
+        assert(BCValue_isStackValueOrParameter(&rhs));
 
         emitLongInst(LongInst_F64ToI, result.stackAddr, rhs.stackAddr);
     }
 
     void F32ToF64(BCValue result, BCValue rhs)
     {
-        assert(isStackValueOrParameter(result));
-        assert(isStackValueOrParameter(rhs));
+        assert(BCValue_isStackValueOrParameter(&result));
+        assert(BCValue_isStackValueOrParameter(&rhs));
 
         emitLongInst(LongInst_F32ToF64, result.stackAddr, rhs.stackAddr);
 
@@ -1479,8 +1549,8 @@ void Finalize()
 
     void F64ToF32(BCValue result, BCValue rhs)
     {
-        assert(isStackValueOrParameter(result));
-        assert(isStackValueOrParameter(rhs));
+        assert(BCValue_isStackValueOrParameter(&result));
+        assert(BCValue_isStackValueOrParameter(&rhs));
 
         emitLongInst(LongInst_F64ToF32, result.stackAddr, rhs.stackAddr);
     }
@@ -1489,7 +1559,7 @@ void Finalize()
     void StrEq3(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(result.vType == BCValueType.Unknown
-            || isStackValueOrParameter(result),
+            || BCValue_isStackValueOrParameter(&result),
             "The result for this must be Empty or a StackValue not: " ~ enumToString(result.vType));
         if (lhs.vType == BCValueType.Immediate)
         {
@@ -1499,14 +1569,14 @@ void Finalize()
         {
             rhs = pushOntoStack(rhs);
         }
-        assert(isStackValueOrParameter(lhs),
+        assert(BCValue_isStackValueOrParameter(&lhs),
             "The lhs of StrEq3 is not a StackValue " ~ enumToString(rhs.vType));
-        assert(isStackValueOrParameter(rhs),
+        assert(BCValue_isStackValueOrParameter(&rhs),
             "The rhs of StrEq3 not a StackValue" ~ enumToString(rhs.vType));
 
         emitLongInst(LongInst_StrEq, lhs.stackAddr, rhs.stackAddr);
 
-        if (isStackValueOrParameter(result))
+        if (BCValue_isStackValueOrParameter(&result))
         {
             emitFlg(result);
         }
@@ -1516,7 +1586,7 @@ void Finalize()
     {
         assert(size <= 255);
 
-        assert(isStackValueOrParameter(result));
+        assert(BCValue_isStackValueOrParameter(&result));
 
         lhs = pushOntoStack(lhs);
         rhs = pushOntoStack(rhs);
@@ -1534,12 +1604,12 @@ string printInstructions(const uint[] arr, const string[ushort] stackMap = null)
 {
     return printInstructions(arr.ptr, cast(uint) arr.length, stackMap);
 }
-/*
+
 string localName(const string[ushort] stackMap, uint addr) pure
 {
     localName(stackMap, cast(ushort)addr);
 }
-*/
+
 
 string localName(const string[ushort] stackMap, ushort addr) pure
 {
@@ -2244,9 +2314,8 @@ string printInstructions(const uint* startInstructions, uint length, const strin
 //    pragma(msg, "not chosing retained error branch");
 //}
 
-__gshared int[ushort.max * 2] byteCodeCache;
-
-__gshared int byteCodeCacheTop = 4;
+// __gshared int[ushort.max * 2] byteCodeCache;
+// __gshared int byteCodeCacheTop = 4;
 
 enum DebugCmdEnum
 {
@@ -2275,21 +2344,61 @@ const (uint[])* getCodeForId (const int fnId, const BCFunction* functions) pure
 {
     return &functions[fnId].byteCode;
 }
-
+*/
 struct Catch
 {
     uint ip;
     uint stackDepth;
 }
 
-struct ReturnAddr
+typedef struct ReturnAddr
 {
     uint ip;
     uint fnId;
     uint stackSize;
     long* retval;
+} ReturnAddr;
+
+
+bool BCInterpreter_Return(BCInterpreter* self)
+{
+    if (self->n_return_addrs)
+    {
+        ReturnAddr returnAddr = self->returnAddrs[--n_return_addrs];
+        byteCode = getCodeForId(returnAddr.fnId, self->functions);
+        self->fnId = returnAddr.fnId;
+        self->ip = returnAddr.ip;
+
+        self->stackP -= (returnAddr.stackSize / 4);
+        self->callDepth--;
+        BCValue cRetval = self->cRetval;
+        
+        if (cRetval.vType == BCValueType_Exception)
+        {
+            assert(!"Execptions are currently unhandeld");
+            //return HandleExp();
+        }
+        if (cRetval.vType == BCValueType_Error || cRetval_vType == BCValueType.Bailout)
+        {
+            return true;
+        }
+        if (cRetval.type.type == BCTypeEnum_i64 || cRetval.type.type == BCTypeEnum_u64 || cRetval.type.type == BCTypeEnum_f52)
+        {
+            (*returnAddr.retval) = cRetval.imm64;
+        }
+        else
+        {
+            (*returnAddr.retval) = cRetval.imm32;
+        }
+        return false;
+    }
+    else
+    {
+        return true;
+    }
 }
 
+/*
 const(BCValue) interpret_(int fnId, const BCValue[] args,
     BCHeap* heapPtr = null, const BCFunction* functions = null,
     const RetainedCall* calls = null,
@@ -2345,31 +2454,31 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
     {
         switch (arg.type.type)
         {
-            case BCTypeEnum.i32, BCTypeEnum.i16, BCTypeEnum.i8:
+            case BCTypeEnum_i32, BCTypeEnum_i16, BCTypeEnum_i8:
             {
                 (stackP[argOffset++]) = cast(int)arg.imm32;
             }
             break;
 
-            case BCTypeEnum.u32, BCTypeEnum.f23, BCTypeEnum.c8, BCTypeEnum.u16, BCTypeEnum.u8, BCTypeEnum.c16, BCTypeEnum.c32:
+            case BCTypeEnum_u32, BCTypeEnum_f23, BCTypeEnum_c8, BCTypeEnum_u16, BCTypeEnum_u8, BCTypeEnum_c16, BCTypeEnum_c32:
             {
                 (stackP[argOffset++]) = cast(uint)arg.imm32;
             }
             break;
 
-        case BCTypeEnum.i64:
+        case BCTypeEnum_i64:
             {
                 (stackP[argOffset++]) = arg.imm64;
             }
             break;
 
-        case BCTypeEnum.u64, BCTypeEnum.f52:
+        case BCTypeEnum_u64, BCTypeEnum_f52:
         {
             (stackP[argOffset++]) = arg.imm64;
         }
         break;
 
-        case BCTypeEnum.Struct, BCTypeEnum.Class, BCTypeEnum.string8, BCTypeEnum.Array, BCTypeEnum.Ptr, BCTypeEnum.Null:
+        case BCTypeEnum_Struct, BCTypeEnum_Class, BCTypeEnum_string8, BCTypeEnum_Array, BCTypeEnum_Ptr, BCTypeEnum_Null:
             {
                 // This might need to be removed again?
                 (stackP[argOffset++]) = arg.heapAddr.addr;
@@ -2385,184 +2494,24 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
 
     BCValue returnValue;
 
-    bool HandleExp()
-    {
-            if (cRetval.vType == BCValueType.Exception)
-            {
-                debug { if (!__ctfe) writeln("Exception in flight ... length of catches: ", catches ? catches.length : -1) ; }
-                debug { if (!__ctfe) writeln("catches: ", catches);  }
-
-                // we return to unroll
-                // lets first handle the case in which there are catches on the catch stack
-                if (catches.length)
-                {
-                    const catch_ = catches[$-1];
-                    debug { if (!__ctfe) writefln("CallDepth:(%d) Catches (%s)", callDepth, catches); }
-
-                    // in case we are above at the callDepth of the next catch
-                    // we need to pass this return value on
-                    if (catch_.stackDepth < callDepth)
-                    {
-                        auto returnAddr = returnAddrs[--n_return_addrs];
-                        ip = returnAddr.ip;
-                        debug { if (!__ctfe) writefln("CatchDepth:(%d) lower than current callStack:(%d) Depth. Returning to ip = %d", catch_.stackDepth, callDepth, ip); }
-                        byteCode = getCodeForId(returnAddr.fnId, functions);
-                        fnId = returnAddr.fnId;
-                        --callDepth;
-                        return false;
-                    }
-                    // In case we are at the callDepth we need to go to the right catch
-                    else if (catch_.stackDepth == callDepth)
-                    {
-                        debug { if (!__ctfe) writeln("stackdepth == Calldepth. Executing catch at: ip=", ip, " byteCode.length="); }
-                        ip = catch_.ip;
-                        // we need to also remove the catches so we don't end up here next time
-                        catches = catches[0 .. $-1];
-                        // resume execution at execption handler block
-                        return false;
-                    }
-                    // in case we end up here there is a catch handler but we skipped it
-                    // this can happen if non of the handlers matched we return the execption
-                    // out of the function .. we can ignore the state of the stack and such
-                    else
-                    {
-                       
-                        debug { if (!__ctfe) writeln("we have not been able to catch the expection returning."); }
-                        return true;
-                    }
-                }
-                // if we go here it means there are no catches anymore to catch this.
-                // we will go on returning this out of the callstack until we hit the end
-                else
-                {
-                    return true;
-                }
-
-                // in case we are at the depth we need to jump to Throw
-                // assert(!catches.length, "We should goto the catchBlock here.");
-            }
-            else
-                assert(0);
-    }
-     
-
-    bool Return()
-    {
-        if (n_return_addrs)
-        {
-            auto returnAddr = returnAddrs[--n_return_addrs];
-            byteCode = getCodeForId(returnAddr.fnId, functions);
-            fnId = returnAddr.fnId;
-            ip = returnAddr.ip;
-
-            stackP = stackP - (returnAddr.stackSize / 4);
-            callDepth--;
-            if (cRetval.vType == BCValueType.Exception)
-            {
-                return HandleExp();
-            }
-            if (cRetval.vType == BCValueType.Error || cRetval.vType == BCValueType.Bailout)
-            {
-                return true;
-            }
-            if (cRetval.type.type == BCTypeEnum.i64 || cRetval.type.type == BCTypeEnum.u64 || cRetval.type.type == BCTypeEnum.f52)
-            {
-                (*returnAddr.retval) = cRetval.imm64;
-            }
-            else
-            {
-                (*returnAddr.retval) = cRetval.imm32;
-            }
-            return false;
-        }
-        else
-        {
-            return true;
-        }
-    }
-
-    // debug(bc) { import std.stdio; writeln("BC.len = ", byteCode.length); }
-    if ((*byteCode).length < 6 || (*byteCode).length <= ip)
-        return typeof(return).init;
 
     while (true && ip <= (*byteCode).length - 1)
     {
-/+
-        DebugCommand command = reciveCommand();
-        do
-        {
-            debug
-            {
-                import std.stdio;
-                if (!__ctfe) writeln("Order: ", enumToString(command.order));
-            }
-
-            Switch : final switch(command.order) with(DebugCmdEnum)
-            {
-                case Invalid : {assert(0, "Invalid DebugCmdEnum");} break;
-                case SetBreakpoint :
-                {
-                    auto bl = command.v1;
-                    foreach(_bl;breakLines)
-                    {
-                        if (bl == _bl)
-                            break Switch;
-                    }
-
-                    breakLines ~= bl;
-                } break;
-                case UnsetBreakpoint :
-                {
-                    auto bl = command.v1;
-                    foreach(uint i, _bl;breakLines)
-                    {
-                        if (_bl == bl)
-                        {
-                            breakLines[i] = breakLines[$-1];
-                            breakLines = breakLines[0 .. $-1];
-                            break;
-                        }
-                    }
-                } break;
-                case ReadStack : {assert(0);} break;
-                case WriteStack : {assert(0);} break;
-                case ReadHeap : {assert(0);} break;
-                case WriteHeap : {assert(0);} break;
-                case Continue : {paused = false;} break;
-                case Nothing :
-                {
-                    if (!paused)
-                    { /*__mmPause()*/ }
-                } break;
-            }
-
-        } while (paused || command.order != DebugCmdEnum.Nothing);
-+/
-        debug (bc_stack)
-            foreach (si; 0 .. stackOffset + 32)
-            {
-                if (!__ctfe)
-                {
-                    printf("StackIndex %d, Content %x\t".ptr, si, stack[cast(uint) si]);
-                    printf("HeapIndex %d, Content %x\n".ptr, si, heapPtr.heapData[cast(uint) si]);
-                }
-            }
-        // debug if (!__ctfe) writeln("ip: ", ip);
-        const lw = (*byteCode)[ip];
-        const uint hi = (*byteCode)[ip + 1];
+        const uint32_t lw = (*byteCode)[ip];
+        const uint32_t hi = (*byteCode)[ip + 1];
         const int imm32c = *(cast(int*)&((*byteCode)[ip + 1]));
         ip += 2;
 
         // consider splitting the stackPointer in stackHigh and stackLow
 
-        const uint opRefOffset = (lw >> 16) & 0xFFFF;
-        const uint lhsOffset = hi & 0xFFFF;
-        const uint rhsOffset = (hi >> 16) & 0xFFFF;
+        const uint32_t opRefOffset = (lw >> 16) & 0xFFFF;
+        const uint32_t lhsOffset = hi & 0xFFFF;
+        const uint32_t rhsOffset = (hi >> 16) & 0xFFFF;
 
-        auto lhsRef = (&stackP[(lhsOffset / 4)]);
-        auto rhs = (&stackP[(rhsOffset / 4)]);
-        auto lhsStackRef = (&stackP[(opRefOffset / 4)]);
-        auto opRef = &stackP[(opRefOffset / 4)];
+        int64_t* lhsRef = (&stackP[(lhsOffset / 4)]);
+        int64_t* rhs = (&stackP[(rhsOffset / 4)]);
+        int64_t* lhsStackRef = (&stackP[(opRefOffset / 4)]);
+        int64_t* opRef = &stackP[(opRefOffset / 4)];
 
         if (!lw)
         { // Skip NOPS
@@ -2597,7 +2546,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
 
         case LongInst_ImmUdiv:
             {
-                (*cast(ulong*)lhsStackRef) /= imm32c;
+                (*cast(uint64_t*)lhsStackRef) /= imm32c;
             }
             break;
 
@@ -2608,7 +2557,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             break;
         case LongInst_ImmAnd32:
             {
-                *lhsStackRef = (cast(uint)*lhsStackRef) & hi;
+                *lhsStackRef = (cast(uint32_t)*lhsStackRef) & hi;
             }
             break;
         case LongInst_ImmOr:
@@ -2623,7 +2572,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             break;
         case LongInst_ImmXor32:
             {
-                *lhsStackRef = (cast(uint)*lhsStackRef) ^ hi;
+                *lhsStackRef = (cast(uint32_t)*lhsStackRef) ^ hi;
             }
             break;
 
@@ -2662,7 +2611,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             break;
         case LongInst_SetHighImm32:
             {
-                *lhsStackRef = (*lhsStackRef & 0x00_00_00_00_FF_FF_FF_FF) | (ulong(hi) << 32UL);
+                *lhsStackRef = (*lhsStackRef & 0x00000000FFFFFFFF) | (ulong(hi) << 32UL);
             }
             break;
         case LongInst_ImmEq:
@@ -2692,7 +2641,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
 
         case LongInst_ImmUlt:
             {
-                if ((cast(ulong)(*lhsStackRef)) < cast(uint)hi)
+                if (((int64_t)(*lhsStackRef)) < cast(uint)hi)
                 {
                     cond = true;
                 }
@@ -2704,7 +2653,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             break;
         case LongInst_ImmUgt:
             {
-                if ((cast(ulong)(*lhsStackRef)) > cast(uint)hi)
+                if (((uint64_t)(*lhsStackRef)) > cast(uint)hi)
                 {
                     cond = true;
                 }
@@ -2716,7 +2665,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             break;
         case LongInst_ImmUle:
             {
-                if ((cast(ulong)(*lhsStackRef)) <= cast(uint)hi)
+                if (((uint64_t)(*lhsStackRef)) <= cast(uint)hi)
                 {
                     cond = true;
                 }
@@ -2728,7 +2677,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             break;
         case LongInst_ImmUge:
             {
-                if ((cast(ulong)(*lhsStackRef)) >= cast(uint)hi)
+                if (((uint64_t)(*lhsStackRef)) >= cast(uint)hi)
                 {
                     cond = true;
                 }
@@ -2753,7 +2702,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             break;
         case LongInst_ImmGt:
             {
-                if (cast()(*lhsStackRef) > imm32c)
+                if ((*lhsStackRef) > imm32c)
                 {
                     cond = true;
                 }
@@ -2861,67 +2810,67 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             break;
         case LongInst_FGt32 :
             {
-                uint _lhs = *lhsRef & uint.max;
-                float flhs = *cast(float*)&_lhs;
-                uint _rhs = *rhs & uint.max;
-                float frhs = *cast(float*)&_rhs;
+                uint32_t _lhs = *lhsRef & UINT32_MAX;
+                float flhs = *(float*)&_lhs;
+                uint32_t _rhs = *rhs & UINT32_MAX;
+                float frhs = *(float*)&_rhs;
 
                 cond = flhs > frhs;
             }
             break;
         case LongInst_FGe32 :
             {
-                uint _lhs = *lhsRef & uint.max;
-                float flhs = *cast(float*)&_lhs;
-                uint _rhs = *rhs & uint.max;
-                float frhs = *cast(float*)&_rhs;
+                uint32_t _lhs = *lhsRef & UINT32_MAX;
+                float flhs = *(float*)&_lhs;
+                uint32_t _rhs = *rhs & UINT32_MAX;
+                float frhs = *(float*)&_rhs;
 
                 cond = flhs >= frhs;
             }
             break;
         case LongInst_FEq32 :
             {
-                uint _lhs = *lhsRef & uint.max;
-                float flhs = *cast(float*)&_lhs;
-                uint _rhs = *rhs & uint.max;
-                float frhs = *cast(float*)&_rhs;
+                 uint32_t _lhs = *lhsRef & UINT32_MAX;
+                float flhs = *(float*)&_lhs;
+                 uint32_t _rhs = *rhsRef & UINT32_MAX;
+                float frhs = *(float*)&_rhs;
 
                 cond = flhs == frhs;
             }
             break;
         case LongInst_FNeq32 :
             {
-                uint _lhs = *lhsRef & uint.max;
-                float flhs = *cast(float*)&_lhs;
-                uint _rhs = *rhs & uint.max;
-                float frhs = *cast(float*)&_rhs;
+                 uint32_t _lhs = *lhsRef & UINT32_MAX;
+                float flhs = *(float*)&_lhs;
+                 uint32_t _rhs = *rhsRef & UINT32_MAX;
+                float frhs = *(float*)&_rhs;
 
                 cond = flhs != frhs;
             }
             break;
         case LongInst_FLt32 :
             {
-                uint _lhs = *lhsRef & uint.max;
-                float flhs = *cast(float*)&_lhs;
-                uint _rhs = *rhs & uint.max;
-                float frhs = *cast(float*)&_rhs;
+                 uint32_t _lhs = *lhsRef & UINT32_MAX;
+                float flhs = *(float*)&_lhs;
+                 uint32_t _rhs = *rhsRef & UINT32_MAX;
+                float frhs = *(float*)&_rhs;
 
                 cond = flhs < frhs;
             }
             break;
         case LongInst_FLe32 :
             {
-                uint _lhs = *lhsRef & uint.max;
-                float flhs = *cast(float*)&_lhs;
-                uint _rhs = *rhs & uint.max;
-                float frhs = *cast(float*)&_rhs;
+                 uint32_t _lhs = *lhsRef & UINT32_MAX;
+                float flhs = *(float*)&_lhs;
+                 uint32_t _rhs = *rhsRef & UINT32_MAX;
+                float frhs = *(float*)&_rhs;
 
                 cond = flhs <= frhs;
             }
             break;
         case LongInst_F32ToF64 :
             {
-                uint rhs32 = (*rhs & uint.max);
+                uint rhs32 = (*rhs & UINT32_MAX);
                 float frhs = *cast(float*)&rhs32;
                 double flhs = frhs;
                 *lhsRef = *cast(long*)&flhs;
@@ -2929,7 +2878,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             break;
         case LongInst_F32ToI :
             {
-                uint rhs32 = (*rhs & uint.max);
+                uint rhs32 = (*rhs & UINT32_MAX);
                 float frhs = *cast(float*)&rhs32;
                 uint _lhs = cast(int)frhs;
                 *lhsRef = _lhs;
@@ -2945,125 +2894,125 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
 
         case LongInst_FAdd32:
             {
-                uint _lhs = *lhsRef & uint.max;
-                float flhs = *cast(float*)&_lhs;
-                uint _rhs = *rhs & uint.max;
-                float frhs = *cast(float*)&_rhs;
+                 uint32_t _lhs = *lhsRef & UINT32_MAX;
+                float flhs = *(float*)&_lhs;
+                 uint32_t _rhs = *rhsRef & UINT32_MAX;
+                float frhs = *(float*)&_rhs;
 
                 flhs += frhs;
 
-                _lhs = *cast(uint*)&flhs;
+                _lhs = *(uint32_t*)&flhs;
                 *lhsRef = _lhs;
             }
             break;
         case LongInst_FSub32:
             {
-                uint _lhs = *lhsRef & uint.max;
-                float flhs = *cast(float*)&_lhs;
-                uint _rhs = *rhs & uint.max;
-                float frhs = *cast(float*)&_rhs;
+                 uint32_t _lhs = *lhsRef & UINT32_MAX;
+                float flhs = *(float*)&_lhs;
+                 uint32_t _rhs = *rhsRef & UINT32_MAX;
+                float frhs = *(float*)&_rhs;
 
                 flhs -= frhs;
 
-                _lhs = *cast(uint*)&flhs;
+                _lhs = *(uint32_t*)&flhs;
                 *lhsRef = _lhs;
             }
             break;
         case LongInst_FMul32:
             {
-                uint _lhs = *lhsRef & uint.max;
-                float flhs = *cast(float*)&_lhs;
-                uint _rhs = *rhs & uint.max;
-                float frhs = *cast(float*)&_rhs;
+                 uint32_t _lhs = *lhsRef & UINT32_MAX;
+                float flhs = *(float*)&_lhs;
+                 uint32_t _rhs = *rhsRef & UINT32_MAX;
+                float frhs = *(float*)&_rhs;
 
                 flhs *= frhs;
 
-                _lhs = *cast(uint*)&flhs;
+                _lhs = *(uint32_t*)&flhs;
                 *lhsRef = _lhs;
             }
             break;
         case LongInst_FDiv32:
             {
-                uint _lhs = *lhsRef & uint.max;
-                float flhs = *cast(float*)&_lhs;
-                uint _rhs = *rhs & uint.max;
-                float frhs = *cast(float*)&_rhs;
+                 uint32_t _lhs = *lhsRef & UINT32_MAX;
+                float flhs = *(float*)&_lhs;
+                 uint32_t _rhs = *rhsRef & UINT32_MAX;
+                float frhs = *(float*)&_rhs;
 
                 flhs /= frhs;
 
-                _lhs = *cast(uint*)&flhs;
+                _lhs = *(uint32_t*)&flhs;
                 *lhsRef = _lhs;
             }
             break;
         case LongInst_FMod32:
             {
-                uint _lhs = *lhsRef & uint.max;
-                float flhs = *cast(float*)&_lhs;
-                uint _rhs = *rhs & uint.max;
-                float frhs = *cast(float*)&_rhs;
+                 uint32_t _lhs = *lhsRef & UINT32_MAX;
+                float flhs = *(float*)&_lhs;
+                 uint32_t _rhs = *rhsRef & UINT32_MAX;
+                float frhs = *(float*)&_rhs;
 
                 flhs %= frhs;
 
-                _lhs = *cast(uint*)&flhs;
+                _lhs = *(uint32_t*)&flhs;
                 *lhsRef = _lhs;
             }
             break;
         case LongInst_FEq64 :
             {
-                ulong _lhs = *lhsRef;
-                double flhs = *cast(double*)&_lhs;
-                ulong _rhs = *rhs;
-                double frhs = *cast(double*)&_rhs;
+                uint64_t _lhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
+                uint64_t _rhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
 
                 cond = flhs == frhs;
             }
             break;
         case LongInst_FNeq64 :
             {
-                ulong _lhs = *lhsRef;
-                double flhs = *cast(double*)&_lhs;
-                ulong _rhs = *rhs;
-                double frhs = *cast(double*)&_rhs;
+                uint64_t _lhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
+                uint64_t _rhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
 
                 cond = flhs < frhs;
             }
             break;
         case LongInst_FLt64 :
             {
-                ulong _lhs = *lhsRef;
-                double flhs = *cast(double*)&_lhs;
-                ulong _rhs = *rhs;
-                double frhs = *cast(double*)&_rhs;
+                uint64_t _lhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
+                uint64_t _rhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
 
                 cond = flhs < frhs;
             }
             break;
         case LongInst_FLe64 :
             {
-                ulong _lhs = *lhsRef;
-                double flhs = *cast(double*)&_lhs;
-                ulong _rhs = *rhs;
-                double frhs = *cast(double*)&_rhs;
+                uint64_t _lhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
+                uint64_t _rhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
 
                 cond = flhs <= frhs;
             }
             break;
         case LongInst_FGt64 :
             {
-                ulong _lhs = *lhsRef;
-                double flhs = *cast(double*)&_lhs;
-                ulong _rhs = *rhs;
-                double frhs = *cast(double*)&_rhs;
+                uint64_t _lhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
+                uint64_t _rhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
 
                 cond = flhs > frhs;
             }
             break;
         case LongInst_FGe64 :
             {
-                ulong _lhs = *lhsRef;
-                double flhs = *cast(double*)&_lhs;
-                ulong _rhs = *rhs;
-                double frhs = *cast(double*)&_rhs;
+                uint64_t _lhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
+                uint64_t _rhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
 
                 cond = flhs >= frhs;
             }
@@ -3073,67 +3022,67 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             {
                 double frhs = *cast(double*)rhs;
                 float flhs = frhs;
-                *lhsRef = *cast(uint*)&flhs;
+                *lhsRef = *(uint32_t*)&flhs;
             }
             break;
         case LongInst_F64ToI :
             {
-                float frhs = *cast(double*)rhs;
-                *lhsRef = cast(long)frhs;
+                float frhs = *(double*)rhs;
+                *lhsRef = (int64_t)frhs;
             }
             break;
         case LongInst_IToF64 :
             {
-                double frhs = cast(double)*rhs;
-                *lhsRef = *cast(long*)&frhs;
+                double frhs = (double)*rhs;
+                *lhsRef = *(int64_t*)&frhs;
             }
             break;
 
         case LongInst_FAdd64:
             {
-                ulong _lhs = *lhsRef;
-                double flhs = *cast(double*)&_lhs;
-                ulong _rhs = *rhs;
-                double frhs = *cast(double*)&_rhs;
+                uint64_t _lhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
+                uint64_t _rhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
 
                 flhs += frhs;
 
-                _lhs = *cast(ulong*)&flhs;
+                _lhs = *(uint64_t*)&flhs;
                 *lhsRef = _lhs;
             }
             break;
         case LongInst_FSub64:
             {
-                ulong _lhs = *lhsRef;
-                double flhs = *cast(double*)&_lhs;
-                ulong _rhs = *rhs;
-                double frhs = *cast(double*)&_rhs;
+                uint64_t _lhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
+                uint64_t _rhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
 
                 flhs -= frhs;
 
-                _lhs = *cast(ulong*)&flhs;
+                _lhs = *(uint64_t*)&flhs;
                 *lhsRef = _lhs;
             }
             break;
         case LongInst_FMul64:
             {
-                ulong _lhs = *lhsRef;
-                double flhs = *cast(double*)&_lhs;
-                ulong _rhs = *rhs;
-                double frhs = *cast(double*)&_rhs;
+                uint64_t _lhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
+                uint64_t _rhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
 
                 flhs *= frhs;
 
-                _lhs = *cast(ulong*)&flhs;
+                _lhs = *cast(uint64_t*)&flhs;
                 *lhsRef = _lhs;
             }
             break;
         case LongInst_FDiv64:
             {
-                ulong _lhs = *lhsRef;
-                double flhs = *cast(double*)&_lhs;
-                ulong _rhs = *rhs;
-                double frhs = *cast(double*)&_rhs;
+                uint64_t _lhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
+                uint64_t _rhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
 
                 flhs /= frhs;
 
@@ -3143,10 +3092,10 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             break;
         case LongInst_FMod64:
             {
-                ulong _lhs = *lhsRef;
-                double flhs = *cast(double*)&_lhs;
-                ulong _rhs = *rhs;
-                double frhs = *cast(double*)&_rhs;
+                uint64_t _lhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
+                uint64_t _rhs = *lhsRef;
+                double flhs = *(double*)&_lhs;
 
                 flhs %= frhs;
 
@@ -3174,10 +3123,10 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                         {
                             auto err = errors[cast(uint)(hi - 1)];
 
-                            *ev1 = imm32(stackP[err.v1.addr / 4] & uint.max);
-                            *ev2 = imm32(stackP[err.v2.addr / 4] & uint.max);
-                            *ev3 = imm32(stackP[err.v3.addr / 4] & uint.max);
-                            *ev4 = imm32(stackP[err.v4.addr / 4] & uint.max);
+                            *ev1 = imm32(stackP[err.v1.addr / 4] & UINT32_MAX);
+                            *ev2 = imm32(stackP[err.v2.addr / 4] & UINT32_MAX);
+                            *ev3 = imm32(stackP[err.v3.addr / 4] & UINT32_MAX);
+                            *ev4 = imm32(stackP[err.v4.addr / 4] & UINT32_MAX);
                         }
                     }
                     return retval;
@@ -3220,7 +3169,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
 
         case LongInst_Ult:
             {
-                if ((cast(ulong)(*lhsRef)) < (cast(ulong)*rhs))
+                if (((uint64_t)(*lhsRef)) < ((uint64_t)*rhs))
                 {
                     cond = true;
                 }
@@ -3232,7 +3181,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             break;
         case LongInst_Ugt:
             {
-                if (cast(ulong)(*lhsRef) > cast(ulong)*rhs)
+                if ((uint64_t)(*lhsRef) > (uint64_t)*rhs)
                 {
                     cond = true;
                 }
@@ -3244,7 +3193,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             break;
         case LongInst_Ule:
             {
-                if ((cast(ulong)(*lhsRef)) <= (cast(ulong)*rhs))
+                if (((uint64_t)(*lhsRef)) <= ((uint64_t)*rhs))
                 {
                     cond = true;
                 }
@@ -3256,7 +3205,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             break;
         case LongInst_Uge:
             {
-                if ((cast(ulong)(*lhsRef)) >= (cast(ulong)*rhs))
+                if (((uint64_t)(*lhsRef)) >= ((uint64_t)*rhs))
                 {
                     cond = true;
                 }
@@ -3340,10 +3289,10 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
 
             case LongInst_Throw:
             {
-                uint expP = ((*opRef) & uint.max);
+                uint expP = ((*opRef) & UINT32_MAX);
                 debug { if (!__ctfe) writeln("*opRef: ", expP); } 
                 auto expTypeIdx = heapPtr.heapData[expP + ClassMetaData.TypeIdIdxOffset];
-                auto expValue = BCValue(HeapAddr(expP), BCType(BCTypeEnum.Class, expTypeIdx));
+                auto expValue = BCValue(HeapAddr(expP), BCType(BCTypeEnum_Class, expTypeIdx));
                 expValue.vType = BCValueType.Exception;
 
                 cRetval = expValue;
@@ -3410,7 +3359,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                     import std.stdio;
                     if (!__ctfe)
                     {
-                        writeln(ip,":Store[",*lhsRef,"] = ",*rhs & uint.max);
+                        writeln(ip,":Store[",*lhsRef,"] = ",*rhs & UINT32_MAX);
                     }
                 }
             }
@@ -3433,90 +3382,55 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
             case LongInst_HeapStore16:
             {
                 assert(*lhsRef, "trying to deref null pointer SP[" ~ itos(cast(int)((lhsRef - &stackP[0])*4)) ~ "] at : &" ~ itos (ip - 2));
-                const addr = *lhsRef;
+                const uint32_t addr = *lhsRef;
                 heapPtr.heapData[addr    ] = ((*rhs     ) & 0xFF);
                 heapPtr.heapData[addr + 1] = ((*rhs >> 8) & 0xFF);
-                debug
-                {
-                    import std.stdio;
-                    if (!__ctfe)
-                    {
-                        writeln(ip,":Store[",*lhsRef,"] = ",*rhs & uint.max);
-                    }
-                }
             }
             break;
 
             case LongInst_HeapLoad32:
             {
-                assert(*rhs, "trying to deref null pointer inLine: " ~ itos(lastLine));
+                assert(*rhs); //, "trying to deref null pointer inLine: " ~ itos(lastLine));
                 (*lhsRef) = loadu32(heapPtr.heapData.ptr + *rhs);
-                debug
-                {
-                    import std.stdio;
-                    writeln("Loaded[",*rhs,"] = ",*lhsRef);
-                }
             }
             break;
         case LongInst_HeapStore32:
             {
-                assert(*lhsRef, "trying to deref null pointer SP[" ~ itos(cast(int)((lhsRef - &stackP[0])*4)) ~ "] at : &" ~ itos (ip - 2));
+                assert(*lhsRef);//, "trying to deref null pointer SP[" ~ itos(cast(int)((lhsRef - &stackP[0])*4)) ~ "] at : &" ~ itos (ip - 2));
                 //(*(heapPtr.heapData.ptr + *lhsRef)) = (*rhs) & 0xFF_FF_FF_FF;
-                storeu32((&heapPtr.heapData[*lhsRef]),  (*rhs) & uint.max);
-
-                debug
-                {
-                    import std.stdio;
-                    if (!__ctfe)
-                    {
-                        writeln(ip,":Store[",*lhsRef,"] = ",*rhs & uint.max);
-                    }
-                }
+                storeu32((&heapPtr.heapData[*lhsRef]),  (*rhs) & UINT32_MAX);
             }
             break;
 
         case LongInst_HeapLoad64:
             {
-                assert(*rhs, "trying to deref null pointer ");
-                const addr = *rhs;
-                (*lhsRef) =       loadu32(&heapPtr.heapData[addr])
-                          | ulong(loadu32(&heapPtr.heapData[addr + 4])) << 32UL;
-
-                debug
-                {
-                    import std.stdio;
-                    if (!__ctfe)
-                    {
-                        writeln(ip,":Loaded[",*rhs,"] = ",*lhsRef);
-                    }
-                }
+                assert(*rhs);//, "trying to deref null pointer ");
+                const uint32_t addr = *rhs;
+                uint64_t value = loadu32(&heapPtr.heapData[addr + 4]);
+                value <<= 32UL;
+                value |= loadu32(&heapPtr.heapData[addr]);
+                
+                (*lhsRef) = value;
             }
             break;
 
         case LongInst_HeapStore64:
             {
-                assert(*lhsRef, "trying to deref null pointer SP[" ~ itos(cast(int)(lhsRef - &stackP[0])*4) ~ "] at : &" ~ itos (ip - 2));
+                assert(*lhsRef);//, "trying to deref null pointer SP[" ~ itos(cast(int)(lhsRef - &stackP[0])*4) ~ "] at : &" ~ itos (ip - 2));
                 const heapOffset = *lhsRef;
                 assert(heapOffset < heapPtr.heapSize, "Store out of range at ip: &" ~ itos(ip - 2) ~ " atLine: " ~ itos(lastLine));
                 auto basePtr = (heapPtr.heapData.ptr + *lhsRef);
                 const addr = *lhsRef;
                 const value = *rhs;
 
-                storeu32(&heapPtr.heapData[addr],     value & uint.max);
-                storeu32(&heapPtr.heapData[addr + 4], cast(uint)(value >> 32));
+                storeu32(&heapPtr.heapData[addr],     value & UINT32_MAX);
+                storeu32(&heapPtr.heapData[addr + 4], cast(uint32_t)(value >> 32));
             }
             break;
 
         case LongInst_Ret32:
             {
-                debug (bc)
-                    if (!__ctfe)
-                    {
-                        import std.stdio;
-
-                        writeln("Ret32 SP[", lhsOffset, "] (", *opRef, ")\n");
-                    }
-                cRetval = imm32(*opRef & uint.max);
+                cRetval = imm32(*opRef & UINT32_MAX);
                 if (Return()) return cRetval;
             }
             break;
@@ -3528,7 +3442,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                     import std.stdio;
                     writeln("Ret32 SP[", lhsOffset, "] (", *opRef, ")\n");
                 }
-                cRetval = imm32(*opRef & uint.max, true);
+                cRetval = imm32(*opRef & UINT32_MAX, true);
                 if (Return()) return cRetval;
             }
             break;
@@ -3592,8 +3506,8 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                 else
                 {
                     const elemSize = (lw >> 8) & 255;
-                    const uint _lhs =  *lhsRef & uint.max;
-                    const uint _rhs =  *rhs & uint.max;
+                    const uint _lhs =  *lhsRef & UINT32_MAX;
+                    const uint _rhs =  *rhs & UINT32_MAX;
 
                     const llbasep = &heapPtr.heapData[_lhs + SliceDescriptor.LengthOffset];
                     const rlbasep = &heapPtr.heapData[_rhs + SliceDescriptor.LengthOffset];
@@ -3661,13 +3575,13 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
         case LongInst_Call:
             {
                 assert(functions, "When calling functions you need functions to call");
-                auto call = calls[uint((*rhs & uint.max)) - 1];
+                auto call = calls[uint((*rhs & UINT32_MAX)) - 1];
                 auto returnAddr = ReturnAddr(ip, fnId, call.callerSp, lhsRef);
 
                 uint fn = (call.fn.vType == BCValueType.Immediate ?
                     call.fn.imm32 :
                     stackP[call.fn.stackAddr.addr / 4]
-                ) & uint.max;
+                ) & UINT32_MAX;
 
                 fnId = fn - 1;
 
@@ -3690,7 +3604,7 @@ const(BCValue) interpret_(int fnId, const BCValue[] args,
                 foreach(size_t i,ref arg;call.args)
                 {
                     const argOffset_ = (i * 1) + 1;
-                    if(isStackValueOrParameter(arg))
+                    if(BCValue_isStackValueOrParameter(&arg))
                     {
                             newStack[argOffset_] = stackP[arg.stackAddr.addr / 4];
                     }
@@ -3934,21 +3848,5 @@ auto testFact()
 //import dmd.ctfe.bc_test;
 
 //static assert(test!BCGen());
-
-BackendInterface BCGen_newInterface()
-{
-    BCGen* gen = (BCGen*) malloc(sizeof(BCGen));
-    BCGen_Init(gen);
-
-    BackendInterface result;
-
-    result.m_instancePointer = gen;
-
-    
-}
-
-void BCGen_destroyInterface(BackendInterface i)
-{
-    free(i.m_instancePointer);
-}
+#endif
 

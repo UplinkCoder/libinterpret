@@ -3,7 +3,6 @@
 
 typedef struct BackendInterface BackendInterface;
 
-typedef void* BCFunction; 
 typedef void* CndJmpBegin;
 typedef void* SourceLocation;
 
@@ -14,10 +13,9 @@ typedef BCValue (*genLocal_t) (void* ctx, BCType bct, const char* name);
 typedef void (*Initialize_t) (void* ctx, uint32_t n_args, ...);
 typedef void (*InitializeV_t) (void* ctx, uint32_t n_args, va_list args);
 typedef void (*Finalize_t) (void* ctx);
-typedef BCFunction (*endFunction_t) (void* ctx, uint32_t fnIdx);
+typedef void* (*endFunction_t) (void* ctx, uint32_t fnIdx);
 typedef BCValue (*genParameter_t) (void* ctx, BCType bct, const char*);
 typedef uint32_t (*beginJmp_t) (void* ctx);
-
 typedef void (*endJmp_t) (void* ctx, BCAddr atIp, BCLabel target);
 typedef BCLabel (*genLabel_t) (void* ctx);
 typedef CndJmpBegin (*beginCndJmp_t) (void* ctx, BCValue cond, bool ifTrue);
@@ -81,7 +79,6 @@ typedef void (*StrEq3_t) (void* ctx, BCValue result, BCValue lhs, BCValue rhs);
 typedef void (*Cat3_t) (void* ctx, BCValue result, BCValue lhs, BCValue rhs, const uint size);
 
 typedef BCValue (*run_t) (void* ctx, uint32_t fnIdx, BCValue* args, uint32_t n_args);
-
 typedef void (*destroy_instance_t) (void* ctx);
 typedef void (*new_instance_t) (void ** result_p);
 
@@ -89,86 +86,86 @@ typedef struct BackendInterface
 {
     const Initialize_t Initialize;
     const InitializeV_t InitializeV;
-    Finalize_t Finalize;
+    const Finalize_t Finalize;
 
-    beginFunction_t beginFunction;
-    endFunction_t endFunction;
+    const beginFunction_t beginFunction;
+    const endFunction_t endFunction;
 
-    genTemporary_t genTemporary;
-    destroyTemporary_t destroyTemporary;
+    const genTemporary_t genTemporary;
+    const destroyTemporary_t destroyTemporary;
 
-    genLocal_t genLocal;
-    genParameter_t genParameter;
-    emitFlg_t emitFlg;
+    const genLocal_t genLocal;
+    const genParameter_t genParameter;
+    const emitFlg_t emitFlg;
 
-    Alloc_t Alloc;
-    Assert_t Assert;
-    MemCpy_t MemCpy;
+    const Alloc_t Alloc;
+    const Assert_t Assert;
+    const MemCpy_t MemCpy;
 
-    File_t File;
-    Line_t Line;
-    Comment_t Comment;
-    Prt_t Prt;
+    const File_t File;
+    const Line_t Line;
+    const Comment_t Comment;
+    const Prt_t Prt;
 
-    Set_t Set;
-    SetHigh_t SetHigh;
-    Ult3_t Ult3;
-    Ule3_t Ule3;
-    Lt3_t Lt3;
-    Le3_t Le3;
-    Ugt3_t Ugt3;
-    Uge3_t Uge3;
-    Gt3_t Gt3;
-    Ge3_t Ge3;
-    Eq3_t Eq3;
-    Neq3_t Neq3;
-    Add3_t Add3;
-    Sub3_t Sub3;
-    Mul3_t Mul3;
-    Div3_t Div3;
-    Udiv3_t Udiv3;
-    And3_t And3;
-    Or3_t Or3;
-    Xor3_t Xor3;
-    Lsh3_t Lsh3;
-    Rsh3_t Rsh3;
-    Mod3_t Mod3;
-    Umod3_t Umod3;
-    Not_t Not;
+    const Set_t Set;
+    const SetHigh_t SetHigh;
+    const Ult3_t Ult3;
+    const Ule3_t Ule3;
+    const Lt3_t Lt3;
+    const Le3_t Le3;
+    const Ugt3_t Ugt3;
+    const Uge3_t Uge3;
+    const Gt3_t Gt3;
+    const Ge3_t Ge3;
+    const Eq3_t Eq3;
+    const Neq3_t Neq3;
+    const Add3_t Add3;
+    const Sub3_t Sub3;
+    const Mul3_t Mul3;
+    const Div3_t Div3;
+    const Udiv3_t Udiv3;
+    const And3_t And3;
+    const Or3_t Or3;
+    const Xor3_t Xor3;
+    const Lsh3_t Lsh3;
+    const Rsh3_t Rsh3;
+    const Mod3_t Mod3;
+    const Umod3_t Umod3;
+    const Not_t Not;
 
-    Call_t Call;
-    Jmp_t Jmp;
-    beginJmp_t beginJmp;
-    endJmp_t endJmp;
-    beginCndJmp_t beginCndJmp;
-    endCndJmp_t endCndJmp;
+    const Call_t Call;
+    const Jmp_t Jmp;
+    const beginJmp_t beginJmp;
+    const endJmp_t endJmp;
+    const beginCndJmp_t beginCndJmp;
+    const endCndJmp_t endCndJmp;
 
-    Load8_t Load8;
-    Store8_t Store8;
-    Load16_t Load16;
-    Store16_t Store16;
-    Load32_t Load32;
-    Store32_t Store32;
-    Load64_t Load64;
-    Store64_t Store64;
-    castTo_t castTo;
+    const Load8_t Load8;
+    const Store8_t Store8;
+    const Load16_t Load16;
+    const Store16_t Store16;
+    const Load32_t Load32;
+    const Store32_t Store32;
+    const Load64_t Load64;
+    const Store64_t Store64;
+    const castTo_t castTo;
 
-    Throw_t Throw;
-    PushCatch_t PushCatch;
-    PopCatch_t PopCatch;
-    Ret_t Ret;
+    const Throw_t Throw;
+    const PushCatch_t PushCatch;
+    const PopCatch_t PopCatch;
+    const Ret_t Ret;
 
-    IToF32_t IToF32;
-    IToF64_t IToF64;
-    F32ToI_t F32ToI;
-    F64ToI_t F64ToI;
-    F32ToF64_t F32ToF64;
-    F64ToF32_t F64ToF32;
+    const IToF32_t IToF32;
+    const IToF64_t IToF64;
+    const F32ToI_t F32ToI;
+    const F64ToI_t F64ToI;
+    const F32ToF64_t F32ToF64;
+    const F64ToF32_t F64ToF32;
 
-    StrEq3_t StrEq3;
-    Cat3_t Cat3;
+    const StrEq3_t StrEq3;
+    const Cat3_t Cat3;
 
-    run_t run;
-    destroy_instance_t destroy_instance;
-    new_instance_t new_instance;
+    const run_t run;
+    const destroy_instance_t destroy_instance;
+    const new_instance_t new_instance;
 } BackendInterface;
