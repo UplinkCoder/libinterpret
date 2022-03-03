@@ -18,7 +18,7 @@
 
 void IntIter_RefillBuffer(IntIter* self)
 {
-    if (!self->fd) assert(!"InitIter should never be called if using a memory buffer");
+    if (self->fd == 0xFFFF) assert(!"InitIter should never be called if using a memory buffer");
 
     IntIter_Check(self);
     int oldCharsInBuffer = self->remaining_chars;
@@ -53,7 +53,7 @@ void IntIter_Init(IntIter* self, int fd)
 
 void IntIter_FromBuffer(IntIter* self, void* buffer, uint32_t sz)
 {
-    self->fd = 0;
+    self->fd = 0xFFFF;
     self->readAgain = 0;
 
     self->remaining_chars = sz;

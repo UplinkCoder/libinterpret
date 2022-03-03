@@ -209,13 +209,13 @@ static short BCGen_isShortJump(const int offset)
     }
 }
 
-static inline int16_t BCGen_ShortInst16(const LongInst i, const int _imm)
+static inline uint32_t BCGen_ShortInst16(const LongInst i, const int _imm)
 {
     int16_t imm = (int16_t) _imm;
     return (i | imm << 16);
 }
 
-static inline int BCGen_ShortInst16Ex(const LongInst i, uint8_t ex, uint16_t imm)
+static inline uint32_t BCGen_ShortInst16Ex(const LongInst i, uint8_t ex, uint16_t imm)
 {
     return i | ex << 8 | imm << 16;
 }
@@ -407,16 +407,12 @@ bool BCInterpreter_Return(BCInterpreter* self)
 
 void PrintCode(IntIter* iter)
 {
-    assert(self->finalized);
+    uint32_t ip = 0;
 
-    uint* codeP = self->byteCodeArray;
-    if (self->byteCodeCount > ARRAY_SIZE(self->byteCodeArray))
-            codeP = self->byteCodeArrayExtra;
-
-    uint32_t ip;
     uint32_t lw;
-    while (IntIter(iter, &lw))
+    while (IntIter_NextInt(iter, &lw))
     {
+        printf("%d: ", ip);
         uint32_t hi;
         bool worked = IntIter_NextInt(iter, &hi);
         assert(worked);
@@ -429,12 +425,12 @@ void PrintCode(IntIter* iter)
         const uint32_t opRefOffset = (lw >> 16) & 0xFFFF;
         const uint32_t lhsOffset   = hi & 0xFFFF;
         const uint32_t rhsOffset   = (hi >> 16) & 0xFFFF;
-
+/*
         int64_t* lhsRef = (&stackP[(lhsOffset / 4)]);
         int64_t* rhs = (&stackP[(rhsOffset / 4)]);
         int64_t* lhsStackRef = (&stackP[(opRefOffset / 4)]);
         int64_t* opRef = &stackP[(opRefOffset / 4)];
-
+*/
         bool cond;
 
         if (!lw)
@@ -447,808 +443,428 @@ void PrintCode(IntIter* iter)
         {
         case LongInst_ImmAdd:
             {
-                printf("LongInst_ImmAdd %R[%d] += %d\n", lhsOffset / 4, imm32c);
+                printf("LongInst_ImmAdd R[%d] += %d\n", opRefOffset / 4, imm32c);
             }
             break;
 
         case LongInst_ImmSub:
             {
-                printf("LongInst_ImmSub %R[%d] -= %d\n", lhsOffset / 4, imm32c);
+                printf("LongInst_ImmSub R[%d] -= %d\n", opRefOffset / 4, imm32c);
             }
             break;
 
         case LongInst_ImmMul:
             {
-                printf("LongInst_ImmMul %R[%d] *= %d\n", lhsOffset / 4, imm32c);
+                printf("LongInst_ImmMul R[%d] *= %d\n", opRefOffset / 4, imm32c);
             }
             break;
 
         case LongInst_ImmDiv:
             {
-                printf("LongInst_ImmDiv\n");
-                (*lhsStackRef) /= imm32c;
+                printf("LongInst_ImmDiv R[%d] /= %d\n", opRefOffset / 4, imm32c);
             }
             break;
 
         case LongInst_ImmUdiv:
             {
-                printf("LongInst_ImmUdiv\n");
-                (*cast(uint64_t*)lhsStackRef) /= imm32c;
+                printf("LongInst_ImmUdiv R[%d] /= %d\n", opRefOffset / 4, imm32c);
             }
             break;
 
         case LongInst_ImmAnd:
             {
-                printf("LongInst_ImmAnd\n");
-                (*lhsStackRef) &= hi;
+                printf("LongInst_ImmAnd R[%d] &= %u\n", opRefOffset / 4, hi);
             }
             break;
         case LongInst_ImmAnd32:
             {
-                printf("LongInst_ImmAnd32\n");
-                *lhsStackRef = (cast(uint32_t)*lhsStackRef) & hi;
+                printf("LongInst_ImmAnd32 R[%d] &= %u\n", opRefOffset / 4, hi);
             }
             break;
         case LongInst_ImmOr:
             {
-                printf("LongInst_ImmOr\n");
-                (*lhsStackRef) |= hi;
+                printf("LongInst_ImmOr R[%d] |= %u\n", opRefOffset / 4, hi);
             }
             break;
         case LongInst_ImmXor:
             {
-                printf("LongInst_ImmXor\n");
-                (*lhsStackRef) ^= hi;
+                printf("LongInst_ImmXor R[%d] ^= %u\n", opRefOffset / 4, hi);
             }
             break;
         case LongInst_ImmXor32:
             {
-                printf("LongInst_ImmXor32\n");
-                *lhsStackRef = (cast(uint32_t)*lhsStackRef) ^ hi;
+                printf("LongInst_ImmXor32 R[%d] ^= %u\n", opRefOffset / 4, hi);
             }
             break;
 
         case LongInst_ImmLsh:
             {
-                printf("LongInst_ImmLsh\n");
-                (*lhsStackRef) <<= hi;
+                printf("LongInst_ImmLsh R[%d] <<= %u\n", opRefOffset / 4, hi);
             }
             break;
         case LongInst_ImmRsh:
             {
-                printf("LongInst_ImmRsh\n");
-                (*lhsStackRef) >>= hi;
+                printf("LongInst_ImmRsh R[%d] >>= %u\n", opRefOffset / 4, hi);
             }
             break;
 
         case LongInst_ImmMod:
             {
-                printf("LongInst_ImmMod\n");
-                (*lhsStackRef) %= imm32c;
+                printf("LongInst_ImmMod R[%d] %%= %d\n", opRefOffset / 4, imm32c);
             }
             break;
         case LongInst_ImmUmod:
             {
-                printf("LongInst_ImmUmod\n");
-                (*cast(uint64_t*)lhsStackRef) %= imm32c;
+                printf("LongInst_ImmUmod R[%d] %%= %u\n", opRefOffset / 4, hi);
             }
             break;
 
         case LongInst_SetImm8:
             {
-                printf("LongInst_SetImm8\n");
-                (*lhsStackRef) = hi;
+                printf("LongInst_SetImm8 R[%d] = %u\n", opRefOffset / 4, hi);
                 assert(hi <= UINT8_MAX);
             }
             break;
         case LongInst_SetImm32:
             {
-                printf("LongInst_SetImm32\n");
-                (*lhsStackRef) = hi;
+                printf("LongInst_SetImm32 R[%d] = %u\n", opRefOffset / 4, hi);
             }
             break;
         case LongInst_SetHighImm32:
             {
-                printf("LongInst_SetHighImm32\n");
-                uint64_t hi64 = hi;
-                *lhsStackRef = (*lhsStackRef & 0x00000000FFFFFFFF) | ((hi64) << 32UL);
+                printf("LongInst_SetImm32High R[%d] |= (%u << 32)\n", opRefOffset / 4, hi);
             }
             break;
         case LongInst_ImmEq:
             {
-                printf("LongInst_ImmEq\n");
-                if ((*lhsStackRef) == imm32c)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_ImmEq R[%d] == %d", opRefOffset / 4, imm32c);
             }
             break;
         case LongInst_ImmNeq:
             {
-                printf("LongInst_ImmNeq\n");
-                if ((*lhsStackRef) != imm32c)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_ImmNeq R[%d] != %d", opRefOffset / 4, imm32c);
             }
             break;
 
         case LongInst_ImmUlt:
             {
-                printf("LongInst_ImmUlt\n");
-                if (((int64_t)(*lhsStackRef)) < cast(uint)hi)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_ImmUlt R[%d] < %u\n", opRefOffset / 4, hi);
             }
             break;
         case LongInst_ImmUgt:
             {
-                printf("LongInst_ImmUgt\n");
-                if (((uint64_t)(*lhsStackRef)) > cast(uint)hi)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_ImmUlt R[%d] > %u\n", opRefOffset / 4, hi);
             }
             break;
         case LongInst_ImmUle:
             {
-                printf("LongInst_ImmUle\n");
-                if (((uint64_t)(*lhsStackRef)) <= cast(uint)hi)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_ImmUle R[%d] <= %u\n", opRefOffset / 4, hi);
             }
             break;
         case LongInst_ImmUge:
             {
-                printf("LongInst_ImmUge\n");
-                if (((uint64_t)(*lhsStackRef)) >= cast(uint)hi)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_ImmUge R[%d] >= %u\n", opRefOffset / 4, hi);
             }
             break;
 
         case LongInst_ImmLt:
             {
-                printf("LongInst_ImmLt\n");
-                if ((*lhsStackRef) < imm32c)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_ImmLt R[%d] < %d\n", opRefOffset / 4, imm32c);
             }
             break;
         case LongInst_ImmGt:
             {
-                printf("LongInst_ImmGt\n");
-                if ((*lhsStackRef) > imm32c)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_ImmGt R[%d] > %d\n", opRefOffset / 4, imm32c);
             }
             break;
         case LongInst_ImmLe:
             {
-                printf("LongInst_ImmLe\n");
-                if ((*lhsStackRef) <= imm32c)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_ImmLe R[%d] <= %d\n", opRefOffset / 4, imm32c);
             }
             break;
         case LongInst_ImmGe:
             {
-                printf("LongInst_ImmGe\n");
-                if ((*lhsStackRef) >= imm32c)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_ImmGe R[%d] >= %d\n", opRefOffset / 4, imm32c);
             }
             break;
 
         case LongInst_Add:
             {
-                printf("LongInst_Add\n");
-                (*lhsRef) += *rhs;
+                printf("LongInst_Add R[%d] += R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Sub:
             {
-                printf("LongInst_Sub\n");
-                (*lhsRef) -= *rhs;
+                printf("LongInst_Sub R[%d] -= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Mul:
             {
-                printf("LongInst_Mul\n");
-                (*lhsRef) *= *rhs;
+                printf("LongInst_Mul R[%d] *= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Div:
             {
-                printf("LongInst_Div\n");
-                (*lhsRef) /= *rhs;
+                printf("LongInst_Div R[%d] /= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Udiv:
             {
-                printf("LongInst_Udiv\n");
-                (*cast(ulong*)lhsRef) /= (*cast(ulong*)rhs);
+                printf("LongInst_Udiv R[%d] /= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_And:
             {
-                printf("LongInst_And\n");
-                (*lhsRef) &= *rhs;
+                printf("LongInst_And R[%d] &= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_And32:
             {
-                printf("LongInst_And32\n");
-               (*lhsRef) = (cast(uint) *lhsRef) & (cast(uint)*rhs);
+                printf("LongInst_And32 R[%d] &= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Or:
             {
-                printf("LongInst_Or\n");
-                (*lhsRef) |= *rhs;
+                printf("LongInst_Or R[%d] |= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Xor32:
             {
-                printf("LongInst_Xor32\n");
-                (*lhsRef) = (cast(uint) *lhsRef) ^ (cast(uint)*rhs);
+                printf("LongInst_Xor32 R[%d] ^= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Xor:
             {
-                printf("LongInst_Xor\n");
-                (*lhsRef) ^= *rhs;
+                printf("LongInst_Xor R[%d] ^= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
 
         case LongInst_Lsh:
             {
-                printf("LongInst_Lsh\n");
-                (*lhsRef) <<= *rhs;
+                printf("LongInst_Lsh R[%d] <<= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Rsh:
             {
-                printf("LongInst_Rsh\n");
-                (*lhsRef) >>= *rhs;
+                printf("LongInst_Rsh R[%d] >>= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Mod:
             {
-                printf("LongInst_Mod\n");
-                (*lhsRef) %= *rhs;
+                printf("LongInst_Mod R[%d] %%= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Umod:
             {
-                printf("LongInst_Umod\n");
-                (*cast(uint64_t*)lhsRef) %= (*cast(uint64_t*)rhs);
+                printf("LongInst_Umod R[%d] %%= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FGt32 :
             {
-                printf("LongInst_FGt32 \n");
-                uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
-                cond = flhs > frhs;
+                printf("LongInst_FGt32 R[%d] > R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FGe32 :
             {
-                printf("LongInst_FGe32 \n");
-                uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
-                cond = flhs >= frhs;
+                printf("LongInst_FGe32 R[%d] >= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FEq32 :
             {
-                printf("LongInst_FEq32 \n");
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
-                cond = flhs == frhs;
+                printf("LongInst_FEq32 R[%d] == R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FNeq32 :
             {
-                printf("LongInst_FNeq32 \n");
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
-                cond = flhs != frhs;
+                printf("LongInst_FNeq32 R[%d] != R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FLt32 :
             {
-                printf("LongInst_FLt32 \n");
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
-                cond = flhs < frhs;
+                printf("LongInst_FLt32 R[%d] < R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FLe32 :
             {
-                printf("LongInst_FLe32 \n");
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
-                cond = flhs <= frhs;
+                printf("LongInst_FLe32 R[%d] <= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_F32ToF64 :
             {
-                printf("LongInst_F32ToF64 \n");
-                uint rhs32 = (*rhs & UINT32_MAX);
-                float frhs = *cast(float*)&rhs32;
-                double flhs = frhs;
-                *lhsRef = *cast(long*)&flhs;
+                printf("LongInst_F64To32 R[%d] = cast(double) R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_F32ToI :
             {
-                printf("LongInst_F32ToI \n");
-                uint rhs32 = (*rhs & UINT32_MAX);
-                float frhs = *cast(float*)&rhs32;
-                uint _lhs = cast(int)frhs;
-                *lhsRef = _lhs;
+                printf("LongInst_FToI32 R[%d] = cast(int) R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_IToF32 :
             {
-                printf("LongInst_IToF32 \n");
-                float frhs = *rhs;
-                uint _lhs = *cast(uint*)&frhs;
-                *lhsRef = _lhs;
+                printf("LongInst_IToF32 R[%d] = cast(float) R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
 
         case LongInst_FAdd32:
             {
-                printf("LongInst_FAdd32\n");
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
-                flhs += frhs;
-
-                _lhs = *(uint32_t*)&flhs;
-                *lhsRef = _lhs;
+                printf("LongInst_FAdd32 R[%d] += R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FSub32:
             {
-                printf("LongInst_FSub32\n");
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
-                flhs -= frhs;
-
-                _lhs = *(uint32_t*)&flhs;
-                *lhsRef = _lhs;
+                printf("LongInst_FSub32 R[%d] -= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FMul32:
             {
-                printf("LongInst_FMul32\n");
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
-                flhs *= frhs;
-
-                _lhs = *(uint32_t*)&flhs;
-                *lhsRef = _lhs;
+                printf("LongInst_FMul32 R[%d] *= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FDiv32:
             {
-                printf("LongInst_FDiv32\n");
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
-                flhs /= frhs;
-
-                _lhs = *(uint32_t*)&flhs;
-                *lhsRef = _lhs;
+                printf("LongInst_FDiv32 R[%d] /= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FMod32:
             {
-                printf("LongInst_FMod32\n");
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
-                flhs = fmodf(flhs, frhs);
-
-                _lhs = *(uint32_t*)&flhs;
-                *lhsRef = _lhs;
+                printf("LongInst_FMod32 R[%d] %%= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FEq64 :
             {
-                printf("LongInst_FEq64 \n");
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                cond = flhs == frhs;
+                printf("LongInst_FEq64 R[%d] == R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FNeq64 :
             {
-                printf("LongInst_FNeq64 \n");
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                cond = flhs < frhs;
+                printf("LongInst_FNeq64 R[%d] != R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FLt64 :
             {
-                printf("LongInst_FLt64 \n");
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                cond = flhs < frhs;
+                printf("LongInst_FLt64 R[%d] < R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FLe64 :
             {
-                printf("LongInst_FLe64 \n");
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                cond = flhs <= frhs;
+                printf("LongInst_FLe64 R[%d] <= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FGt64 :
             {
-                printf("LongInst_FGt64 \n");
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                cond = flhs > frhs;
+                printf("LongInst_FGt64 R[%d] > R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FGe64 :
             {
-                printf("LongInst_FGe64 \n");
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                cond = flhs >= frhs;
+                printf("LongInst_FGe64 R[%d] >= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
 
         case LongInst_F64ToF32 :
             {
-                printf("LongInst_F64ToF32 \n");
-                double frhs = *cast(double*)rhs;
-                float flhs = frhs;
-                *lhsRef = *(uint32_t*)&flhs;
+                printf("LongInst_F64ToF32 R[%d] = cast(float) R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_F64ToI :
             {
-                printf("LongInst_F64ToI \n");
-                float frhs = *(double*)rhs;
-                *lhsRef = (int64_t)frhs;
+                printf("LongInst_F64ToI R[%d] = cast(int64_t) R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_IToF64 :
             {
-                printf("LongInst_IToF64 \n");
-                double frhs = (double)*rhs;
-                *lhsRef = *(int64_t*)&frhs;
+                printf("LongInst_IToF64 R[%d] = cast(double) R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
 
         case LongInst_FAdd64:
             {
-                printf("LongInst_FAdd64\n");
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                flhs += frhs;
-
-                _lhs = *(uint64_t*)&flhs;
-                *lhsRef = _lhs;
+                printf("LongInst_FAdd64 R[%d] == R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FSub64:
             {
-                printf("LongInst_FSub64\n");
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                flhs -= frhs;
-
-                _lhs = *(uint64_t*)&flhs;
-                *lhsRef = _lhs;
+                printf("LongInst_FSub64 R[%d] -= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FMul64:
             {
-                printf("LongInst_FMul64\n");
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                flhs *= frhs;
-
-                _lhs = *cast(uint64_t*)&flhs;
-                *lhsRef = _lhs;
+                printf("LongInst_FMul64 R[%d] *= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FDiv64:
             {
-                printf("LongInst_FDiv64\n");
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                flhs /= frhs;
-
-                _lhs = *cast(uint64_t*)&flhs;
-                *(cast(uint64_t*)lhsRef) = _lhs;
+                printf("LongInst_FDiv64 R[%d] /= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_FMod64:
             {
-                printf("LongInst_FMod64\n");
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                flhs = fmod(flhs, frhs);
-
-                _lhs = *cast(uint64_t*)&flhs;
-                *(cast(uint64_t*)lhsRef) = _lhs;
+                printf("LongInst_FMod64 R[%d] %%= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
 
         case LongInst_Assert:
             {
-                printf("LongInst_Assert\n");
-                if (*opRef == 0)
-                {
-                    BCValue retval = imm32(hi);
-                    retval.vType = BCValueType_Error;
-                    return retval;
-                }
+                printf("LongInst_Assert(R[%d])\n", opRefOffset / 4);
             }
             break;
         case LongInst_Eq:
             {
-                printf("LongInst_Eq\n");
-                if ((*lhsRef) == *rhs)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
-
+                printf("LongInst_Eq R[%d] == R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
 
         case LongInst_Neq:
             {
-                printf("LongInst_Neq\n");
-                if ((*lhsRef) != *rhs)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_Neq R[%d] == R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
 
         case LongInst_Set:
             {
-                printf("LongInst_Set\n");
-                (*lhsRef) = *rhs;
+                printf("LongInst_Set R[%d] = R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
 
         case LongInst_Ult:
             {
-                printf("LongInst_Ult\n");
-                if (((uint64_t)(*lhsRef)) < ((uint64_t)*rhs))
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_Ult R[%d] < R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Ugt:
             {
-                printf("LongInst_Ugt\n");
-                if ((uint64_t)(*lhsRef) > (uint64_t)*rhs)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_Ngt R[%d] > R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Ule:
             {
-                printf("LongInst_Ule\n");
-                if (((uint64_t)(*lhsRef)) <= ((uint64_t)*rhs))
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_Ule R[%d] <= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Uge:
             {
-                printf("LongInst_Uge\n");
-                if (((uint64_t)(*lhsRef)) >= ((uint64_t)*rhs))
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
-
+                printf("LongInst_Uge R[%d] >= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
 
         case LongInst_Lt:
             {
-                printf("LongInst_Lt\n");
-                if ((*lhsRef) < *rhs)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_Neq R[%d] < R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Gt:
             {
-                printf("LongInst_Gt\n");
-                if ((*lhsRef) > *rhs)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
+                printf("LongInst_Gt R[%d] > R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Le:
             {
-                printf("LongInst_Le\n");
-                if ((*lhsRef) <= *rhs)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
-
+                printf("LongInst_Le R[%d] <= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Ge:
             {
-                printf("LongInst_Ge\n");
-                if ((*lhsRef) >= *rhs)
-                {
-                    cond = true;
-                }
-                else
-                {
-                    cond = false;
-                }
-
+                printf("LongInst_Ge R[%d] >= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
 #if 0
@@ -1288,165 +904,108 @@ void PrintCode(IntIter* iter)
 #endif
         case LongInst_Jmp:
             {
-                printf("LongInst_Jmp\n");
-                state.ip = hi;
+                printf("LongInst_Jmp :%u\n", hi);
             }
             break;
         case LongInst_JmpNZ:
             {
-                printf("LongInst_JmpNZ\n");
-                if ((*lhsStackRef) != 0)
-                {
-                    state.ip = hi;
-                }
+                printf("LongInst_JmpNZ :%u\n", hi);
             }
             break;
         case LongInst_JmpZ:
             {
-                printf("LongInst_JmpZ\n");
-                if ((*lhsStackRef) == 0)
-                {
-                    state.ip = hi;
-                }
+                printf("LongInst_JmpZ :%u\n", hi);
             }
             break;
         case LongInst_JmpFalse:
             {
-                printf("LongInst_JmpFalse\n");
-                if (!cond)
-                {
-                    state.ip = hi;
-                }
+                printf("LongInst_JmpFalse :%u\n", hi);
             }
             break;
         case LongInst_JmpTrue:
             {
-                printf("LongInst_JmpTrue\n");
-                if (cond)
-                {
-                    state.ip = hi;
-                }
+                printf("LongInst_JmpTrue\n :%u\n", hi);
             }
             break;
 
         case LongInst_HeapLoad8:
             {
-                printf("LongInst_HeapLoad8\n");
-                assert(*rhs);//, "trying to deref null pointer inLine: " ~ itos(lastLine));
-                (*lhsRef) = heapPtr->heapData[*rhs];
+                printf("LongInst_HeapLoad8 R[%d] = HEAP[%d]\n", lhsOffset / 4, rhsOffset);
             }
             break;
         case LongInst_HeapStore8:
             {
-                printf("LongInst_HeapStore8\n");
-                assert(*lhsRef);//, "trying to deref null pointer SP[" ~ itos(cast(int)((lhsRef - &stackP[0])*4)) ~ "] at : &" ~ itos (ip - 2));
-                heapPtr->heapData[*lhsRef] = ((*rhs) & 0xFF);
+                printf("LongInst_HeapStore8 HEAP[%d] = R[%d]\n", lhsOffset, rhsOffset / 4);
             }
             break;
 
             case LongInst_HeapLoad16:
             {
-                printf("LongInst_HeapLoad16\n");
-                assert(*rhs);//, "trying to deref null pointer inLine: " ~ itos(lastLine));
-                const long addr = *lhsRef;
-                (*lhsRef) =  heapPtr->heapData[addr]
-                          | (heapPtr->heapData[addr + 1] << 8);
+                printf("LongInst_HeapLoad16 R[%d] = HEAP[%d]\n", lhsOffset / 4, rhsOffset);
 
             }
             break;
             case LongInst_HeapStore16:
             {
-                printf("LongInst_HeapStore16\n");
-                assert(*lhsRef);//, "trying to deref null pointer SP[" ~ itos(cast(int)((lhsRef - &stackP[0])*4)) ~ "] at : &" ~ itos (ip - 2));
-                const uint32_t addr = *lhsRef;
-                heapPtr->heapData[addr    ] = ((*rhs     ) & 0xFF);
-                heapPtr->heapData[addr + 1] = ((*rhs >> 8) & 0xFF);
+                printf("LongInst_HeapStore16 HEAP[%d] = R[%d]\n", lhsOffset, rhsOffset / 4);
             }
             break;
 
             case LongInst_HeapLoad32:
             {
-                printf("LongInst_HeapLoad32\n");
-                assert(*rhs); //, "trying to deref null pointer inLine: " ~ itos(lastLine));
-                (*lhsRef) = loadu32(heapPtr->heapData + *rhs);
+                printf("LongInst_HeapLoad32 R[%d] = HEAP[%d]\n", lhsOffset / 4, rhsOffset);
             }
             break;
         case LongInst_HeapStore32:
             {
-                printf("LongInst_HeapStore32\n");
-                assert(*lhsRef);//, "trying to deref null pointer SP[" ~ itos(cast(int)((lhsRef - &stackP[0])*4)) ~ "] at : &" ~ itos (ip - 2));
-                //(*(heapPtr->heapData.ptr + *lhsRef)) = (*rhs) & 0xFF_FF_FF_FF;
-                storeu32((&heapPtr->heapData[*lhsRef]),  (*rhs) & UINT32_MAX);
+                printf("LongInst_HeapStore32 HEAP[%d] = R[%d]\n", lhsOffset, rhsOffset / 4);
             }
             break;
 
         case LongInst_HeapLoad64:
             {
-                printf("LongInst_HeapLoad64\n");
-                assert(*rhs);//, "trying to deref null pointer ");
-                const uint32_t addr = *rhs;
-                uint64_t value = loadu32(&heapPtr->heapData[addr + 4]);
-                value <<= 32UL;
-                value |= loadu32(&heapPtr->heapData[addr]);
-                
-                (*lhsRef) = value;
-            }
+                 printf("LongInst_HeapLoad64 R[%d] = HEAP[%d]\n", lhsOffset / 4, rhsOffset);
+           }
             break;
 
         case LongInst_HeapStore64:
             {
-                printf("LongInst_HeapStore64\n");
-                assert(*lhsRef);//, "trying to deref null pointer SP[" ~ itos(cast(int)(lhsRef - &stackP[0])*4) ~ "] at : &" ~ itos (ip - 2));
-                const int64_t heapOffset = *lhsRef;
-                assert(heapOffset < heapPtr->heapSize);//, "Store out of range at ip: &" ~ itos(ip - 2) ~ " atLine: " ~ itos(lastLine));
-                const uint8_t* basePtr = (heapPtr->heapData + *lhsRef);
-                const long addr = *lhsRef;
-                const long value = *rhs;
-
-                storeu32(&heapPtr->heapData[addr],     value & UINT32_MAX);
-                storeu32(&heapPtr->heapData[addr + 4], cast(uint32_t)(value >> 32));
+                printf("LongInst_HeapStore64 HEAP[%d] = R[%d]\n", lhsOffset, rhsOffset / 4);
             }
             break;
 
         case LongInst_Ret32:
             {
-                printf("LongInst_Ret32\n");
-                state.cRetval = imm32(*opRef & UINT32_MAX);
-                if (BCInterpreter_Return(&state)) return state.cRetval;
+                printf("LongInst_Ret32 R[%d]\n", opRefOffset / 4);
             }
             break;
         case LongInst_RetS32:
             {
-                printf("LongInst_RetS32\n");
-                state.cRetval = imm32_(*opRef & UINT32_MAX, true);
-                if (BCInterpreter_Return(&state)) return state.cRetval;
+                printf("LongInst_RetS32 R[%d]\n", opRefOffset / 4);
             }
             break;
         case LongInst_RetS64:
             {
-                printf("LongInst_RetS64\n");
-                state.cRetval = imm64_(*opRef, true);
-                if (BCInterpreter_Return(&state)) return state.cRetval;
+                printf("LongInst_RetS64 R[%d]\n", opRefOffset / 4);
             }
             break;
 
         case LongInst_Ret64:
             {
-                printf("LongInst_Ret64\n");
-                state.cRetval = imm64_(*opRef, false);
-                if (BCInterpreter_Return(&state)) return state.cRetval;
+                printf("LongInst_Ret64 R[%d]\n", opRefOffset / 4);
             }
             break;
         case LongInst_RelJmp:
             {
-                printf("LongInst_RelJmp\n");
-                state.ip += (cast(short)(lw >> 16)) - 2;
+                printf("LongInst_RelJmp : %d\n", (int16_t)(lw >> 16) - 2);
             }
             break;
         case LongInst_PrintValue:
             {
-                printf("LongInst_PrintValue\n");
-                if ((lw & UINT16_MAX) >> 8)
+                bool isString = ((lw & UINT16_MAX) >> 8) != 0;
+                printf("LongInst_Print%s\n", (isString ? "String" : "Value"));
+/*
+                if (isString)
                 {
                     long offset = *opRef;
                     uint8_t length = heapPtr->heapData[offset];
@@ -1457,18 +1016,17 @@ void PrintCode(IntIter* iter)
                 {
                     printf("Addr: %lu, Value %lx\n", (opRef - stackP) * 4, *opRef);
                 }
+*/
             }
             break;
         case LongInst_Not:
             {
-                printf("LongInst_Not\n");
-                (*opRef) = ~(*opRef);
+                printf("LongInst_Not R[%d]\n", opRefOffset / 4);
             }
             break;
         case LongInst_Flg:
             {
-                printf("LongInst_Flg\n");
-                (*opRef) = cond;
+                printf("LongInst_Flg R[%d]\n", opRefOffset / 4);
             }
             break;
 
@@ -1556,120 +1114,28 @@ void PrintCode(IntIter* iter)
 #endif
         case LongInst_Call:
             {
-                printf("LongInst_Call\n");
-                assert(self->functions);//, "When calling functions you need functions to call");
-                RetainedCall call = self->calls[(*rhs & UINT32_MAX) - 1];
-                ReturnAddr returnAddr = {state.ip, state.fnIdx, call.callerSp.addr, lhsRef};
-
-                uint32_t fn = ((call.fn.vType == BCValueType_Immediate) ?
-                    call.fn.imm32.imm32 :
-                    stackP[call.fn.stackAddr.addr / 4]
-                ) & UINT32_MAX;
-
-                state.fnIdx = fn - 1;
-
-                uint32_t stackOffsetCall = state.stackTop + call.callerSp.addr;
-                long* newStack = stackP + (call.callerSp.addr / 4);
-
-                if (fn == skipFn)
-                    continue;
-
-                //foreach(size_t i,ref arg;call.args)
-                for(int i = 0; i < call.n_args; i++)
-                {
-                    const BCValue* arg = call.args + i;
-                    const int argOffset_ = (i * 1) + 1;
-                    if(BCValue_isStackValueOrParameter(arg))
-                    {
-                        newStack[argOffset_] = stackP[arg->stackAddr.addr / 4];
-                    }
-                    else if (arg->vType == BCValueType_Immediate)
-                    {
-                        newStack[argOffset_] = arg->imm64.imm64;
-                    }
-                    else
-                    {
-                        assert(0);//, "Argument " ~ itos(cast(int)i) ~" ValueType unhandeled: " ~ enumToString(arg.vType));
-                    }
-                }
-
-                if (state.callDepth++ == max_call_depth)
-                {
-                        BCValue bailoutValue;
-                        bailoutValue.vType = BCValueType_Bailout;
-                        bailoutValue.imm32.imm32 = 2000;
-                        return bailoutValue;
-                }
-                {
-                    state.returnAddrs[state.n_return_addrs++] = returnAddr;
-                    state.stackTop = state.stackTop + (call.callerSp.addr / 4);
-                    BCFunction* f =  self->functions + state.fnIdx;
-                    state.ip = f->bytecode_start;
-                }
+                printf("LongInst_Call R[%d] = ?\n", (opRefOffset / 4));
             }
             break;
 
         case LongInst_Alloc:
             {
-                printf("LongInst_Alloc\n");
-                const uint32_t allocSize = *rhs;
-                const uint32_t heapSize = heapPtr->heapSize;
-
-                if(heapSize + allocSize  >= heapPtr->heapMax)
-                {
-                    if (heapPtr->heapMax >= (1 << 31))
-                        assert(0);//, "!!! HEAP OVERFLOW !!!");
-                    else
-                    {
-                        // we will now resize the heap to 4 times its former size
-                        const uint32_t newHeapSize =
-                            ((allocSize < heapPtr->heapMax * 2) ?
-                            heapPtr->heapMax * 4 :
-                            align4(cast(uint32_t)(heapPtr->heapMax + allocSize)) * 2);
-
-                        heapPtr->heapData = realloc(heapPtr->heapData, newHeapSize);
-                        heapPtr->heapMax = newHeapSize;
-                    }
-                }
-
-                *lhsRef = heapSize;
-                heapPtr->heapSize += allocSize;
+                printf("LongInst_Alloc R[%d] = ALLOC(R[%d])\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_MemCpy:
             {
-                printf("LongInst_MemCpy\n");
-                uint32_t cpySize = cast(uint32_t) *opRef;
-                uint32_t cpySrc = cast(uint32_t) *rhs;
-                uint32_t cpyDst = cast(uint32_t) *lhsRef;
-                
-                if (cpySrc != cpyDst && cpySize != 0)
-                {
-                    // assert(cpySize, "cpySize == 0");
-                    assert(cpySrc);//, "cpySrc == 0" ~ " inLine: " ~ itos(lastLine));
-
-                    assert(cpyDst);//, "cpyDst == 0" ~ " inLine: " ~ itos(lastLine));
-
-                    assert(cpyDst >= cpySrc + cpySize || cpyDst + cpySize <= cpySrc);
-                    //, "Overlapping MemCpy is not supported --- src: " ~ itos(cpySrc)
-                    //    ~ " dst: " ~ itos(cpyDst) ~ " size: " ~ itos(cpySize));
-                    
-                    uint8_t* heapData = heapPtr->heapData;
-                    
-                    uint8_t* cpyDstP = heapPtr->heapData + cpyDst;
-                    uint8_t* cpySrcP = heapPtr->heapData + cpySrc;
-
-                    memcpy(cpyDstP, cpySrcP, cpySize * sizeof(*heapPtr->heapData));
-                    //heapPtr->heapData[cpyDst .. cpyDst + cpySize] = heapPtr->heapData[cpySrc .. cpySrc + cpySize];
-                }
+                //TODO verify this printout
+                printf("LongInst_MemCpy(R[%d], R[%d], R[%d])\n", lhsOffset / 4 , rhsOffset / 4 , opRefOffset / 4);
             }
             break;
 
         case LongInst_Comment:
             {
-                printf("LongInst_Comment\n");
-L_LongInst_Comment:
-                state.ip += align4(hi) / 4;
+                printf("LongInst_Comment [length:%d]\n", align4(hi) / 4);
+                int k = 12;
+L_LongInst_CommentP:
+                k = 2;
             }
             break;
 #if 0
@@ -1711,14 +1177,13 @@ L_LongInst_Comment:
         case LongInst_File :
             {
                 printf("LongInst_File \n");
-                goto L_LongInst_Comment;
+                goto L_LongInst_CommentP;
             }
         case LongInst_Line :
             {
                 printf("LongInst_Line \n");
                 uint32_t breakingOn;
                 uint32_t line = hi;
-                state.lastLine = line;
 #if 0
                 foreach(bl;breakLines)
                 {
@@ -1740,23 +1205,17 @@ L_LongInst_Comment:
             break;
         }
     }
-    BCValue bailoutValue;
-Lbailout :
-    bailoutValue.vType = BCValueType_Bailout;
-    
-    return bailoutValue;
 }
 
 
 BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_args, BCHeap* heapPtr)
 {
     assert(self->finalized);
-    
+
     BCInterpreter state = {0};
     state.ip = 4;
     int64_t* stackP = state.stack;
-    
-    
+
     uint* codeP = self->byteCodeArray;
     if (self->byteCodeCount > ARRAY_SIZE(self->byteCodeArray))
             codeP = self->byteCodeArrayExtra;
@@ -1786,26 +1245,22 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             continue;
         }
 
-        switch (cast(
-LongInst)(lw & INSTMASK))
+        switch (cast(LongInst)(lw & INSTMASK))
         {
         case LongInst_ImmAdd:
             {
-                printf("case LongInst_ImmAdd\n");
                 (*lhsStackRef) += imm32c;
             }
             break;
 
         case LongInst_ImmSub:
             {
-                printf("LongInst_ImmSub\n");
                 (*lhsStackRef) -= imm32c;
             }
             break;
 
         case LongInst_ImmMul:
             {
-                printf("LongInst_ImmMul\n");
                 (*lhsStackRef) *= imm32c;
             }
             break;
@@ -1819,91 +1274,77 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_ImmUdiv:
             {
-                printf("LongInst_ImmUdiv\n");
                 (*cast(uint64_t*)lhsStackRef) /= imm32c;
             }
             break;
 
         case LongInst_ImmAnd:
             {
-                printf("LongInst_ImmAnd\n");
                 (*lhsStackRef) &= hi;
             }
             break;
         case LongInst_ImmAnd32:
             {
-                printf("LongInst_ImmAnd32\n");
                 *lhsStackRef = (cast(uint32_t)*lhsStackRef) & hi;
             }
             break;
         case LongInst_ImmOr:
             {
-                printf("LongInst_ImmOr\n");
                 (*lhsStackRef) |= hi;
             }
             break;
         case LongInst_ImmXor:
             {
-                printf("LongInst_ImmXor\n");
                 (*lhsStackRef) ^= hi;
             }
             break;
         case LongInst_ImmXor32:
             {
-                printf("LongInst_ImmXor32\n");
                 *lhsStackRef = (cast(uint32_t)*lhsStackRef) ^ hi;
             }
             break;
 
         case LongInst_ImmLsh:
             {
-                printf("LongInst_ImmLsh\n");
                 (*lhsStackRef) <<= hi;
             }
             break;
         case LongInst_ImmRsh:
             {
-                printf("LongInst_ImmRsh\n");
                 (*lhsStackRef) >>= hi;
             }
             break;
 
         case LongInst_ImmMod:
             {
-                printf("LongInst_ImmMod\n");
                 (*lhsStackRef) %= imm32c;
             }
             break;
         case LongInst_ImmUmod:
             {
-                printf("LongInst_ImmUmod\n");
                 (*cast(uint64_t*)lhsStackRef) %= imm32c;
             }
             break;
 
         case LongInst_SetImm8:
             {
-                printf("LongInst_SetImm8\n");
                 (*lhsStackRef) = hi;
                 assert(hi <= UINT8_MAX);
             }
             break;
         case LongInst_SetImm32:
             {
-                printf("LongInst_SetImm32\n");
                 (*lhsStackRef) = hi;
             }
             break;
         case LongInst_SetHighImm32:
             {
-                printf("LongInst_SetHighImm32\n");
                 uint64_t hi64 = hi;
                 *lhsStackRef = (*lhsStackRef & 0x00000000FFFFFFFF) | ((hi64) << 32UL);
             }
             break;
         case LongInst_ImmEq:
             {
-                printf("LongInst_ImmEq\n");
                 if ((*lhsStackRef) == imm32c)
                 {
                     cond = true;
@@ -1916,7 +1357,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_ImmNeq:
             {
-                printf("LongInst_ImmNeq\n");
                 if ((*lhsStackRef) != imm32c)
                 {
                     cond = true;
@@ -1930,7 +1370,6 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_ImmUlt:
             {
-                printf("LongInst_ImmUlt\n");
                 if (((int64_t)(*lhsStackRef)) < cast(uint)hi)
                 {
                     cond = true;
@@ -1943,7 +1382,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_ImmUgt:
             {
-                printf("LongInst_ImmUgt\n");
                 if (((uint64_t)(*lhsStackRef)) > cast(uint)hi)
                 {
                     cond = true;
@@ -1956,7 +1394,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_ImmUle:
             {
-                printf("LongInst_ImmUle\n");
                 if (((uint64_t)(*lhsStackRef)) <= cast(uint)hi)
                 {
                     cond = true;
@@ -1969,7 +1406,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_ImmUge:
             {
-                printf("LongInst_ImmUge\n");
                 if (((uint64_t)(*lhsStackRef)) >= cast(uint)hi)
                 {
                     cond = true;
@@ -1983,7 +1419,6 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_ImmLt:
             {
-                printf("LongInst_ImmLt\n");
                 if ((*lhsStackRef) < imm32c)
                 {
                     cond = true;
@@ -1996,7 +1431,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_ImmGt:
             {
-                printf("LongInst_ImmGt\n");
                 if ((*lhsStackRef) > imm32c)
                 {
                     cond = true;
@@ -2009,7 +1443,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_ImmLe:
             {
-                printf("LongInst_ImmLe\n");
                 if ((*lhsStackRef) <= imm32c)
                 {
                     cond = true;
@@ -2022,7 +1455,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_ImmGe:
             {
-                printf("LongInst_ImmGe\n");
                 if ((*lhsStackRef) >= imm32c)
                 {
                     cond = true;
@@ -2036,92 +1468,77 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_Add:
             {
-                printf("LongInst_Add\n");
                 (*lhsRef) += *rhs;
             }
             break;
         case LongInst_Sub:
             {
-                printf("LongInst_Sub\n");
                 (*lhsRef) -= *rhs;
             }
             break;
         case LongInst_Mul:
             {
-                printf("LongInst_Mul\n");
                 (*lhsRef) *= *rhs;
             }
             break;
         case LongInst_Div:
             {
-                printf("LongInst_Div\n");
                 (*lhsRef) /= *rhs;
             }
             break;
         case LongInst_Udiv:
             {
-                printf("LongInst_Udiv\n");
                 (*cast(ulong*)lhsRef) /= (*cast(ulong*)rhs);
             }
             break;
         case LongInst_And:
             {
-                printf("LongInst_And\n");
                 (*lhsRef) &= *rhs;
             }
             break;
         case LongInst_And32:
             {
-                printf("LongInst_And32\n");
                (*lhsRef) = (cast(uint) *lhsRef) & (cast(uint)*rhs);
             }
             break;
         case LongInst_Or:
             {
-                printf("LongInst_Or\n");
                 (*lhsRef) |= *rhs;
             }
             break;
         case LongInst_Xor32:
             {
-                printf("LongInst_Xor32\n");
                 (*lhsRef) = (cast(uint) *lhsRef) ^ (cast(uint)*rhs);
             }
             break;
         case LongInst_Xor:
             {
-                printf("LongInst_Xor\n");
                 (*lhsRef) ^= *rhs;
             }
             break;
 
         case LongInst_Lsh:
             {
-                printf("LongInst_Lsh\n");
                 (*lhsRef) <<= *rhs;
             }
             break;
         case LongInst_Rsh:
             {
-                printf("LongInst_Rsh\n");
                 (*lhsRef) >>= *rhs;
             }
             break;
         case LongInst_Mod:
             {
-                printf("LongInst_Mod\n");
                 (*lhsRef) %= *rhs;
             }
             break;
         case LongInst_Umod:
             {
-                printf("LongInst_Umod\n");
                 (*cast(uint64_t*)lhsRef) %= (*cast(uint64_t*)rhs);
             }
             break;
         case LongInst_FGt32 :
             {
-                printf("LongInst_FGt32 \n");
                 uint32_t _lhs = *lhsRef & UINT32_MAX;
                 float flhs = *(float*)&_lhs;
                 uint32_t _rhs = *rhs & UINT32_MAX;
@@ -2132,7 +1549,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FGe32 :
             {
-                printf("LongInst_FGe32 \n");
                 uint32_t _lhs = *lhsRef & UINT32_MAX;
                 float flhs = *(float*)&_lhs;
                 uint32_t _rhs = *rhs & UINT32_MAX;
@@ -2143,7 +1559,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FEq32 :
             {
-                printf("LongInst_FEq32 \n");
                  uint32_t _lhs = *lhsRef & UINT32_MAX;
                 float flhs = *(float*)&_lhs;
                  uint32_t _rhs = *rhs & UINT32_MAX;
@@ -2154,7 +1569,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FNeq32 :
             {
-                printf("LongInst_FNeq32 \n");
                  uint32_t _lhs = *lhsRef & UINT32_MAX;
                 float flhs = *(float*)&_lhs;
                  uint32_t _rhs = *rhs & UINT32_MAX;
@@ -2165,7 +1579,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FLt32 :
             {
-                printf("LongInst_FLt32 \n");
                  uint32_t _lhs = *lhsRef & UINT32_MAX;
                 float flhs = *(float*)&_lhs;
                  uint32_t _rhs = *rhs & UINT32_MAX;
@@ -2176,7 +1589,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FLe32 :
             {
-                printf("LongInst_FLe32 \n");
                  uint32_t _lhs = *lhsRef & UINT32_MAX;
                 float flhs = *(float*)&_lhs;
                  uint32_t _rhs = *rhs & UINT32_MAX;
@@ -2187,7 +1599,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_F32ToF64 :
             {
-                printf("LongInst_F32ToF64 \n");
                 uint rhs32 = (*rhs & UINT32_MAX);
                 float frhs = *cast(float*)&rhs32;
                 double flhs = frhs;
@@ -2196,7 +1607,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_F32ToI :
             {
-                printf("LongInst_F32ToI \n");
                 uint rhs32 = (*rhs & UINT32_MAX);
                 float frhs = *cast(float*)&rhs32;
                 uint _lhs = cast(int)frhs;
@@ -2205,7 +1615,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_IToF32 :
             {
-                printf("LongInst_IToF32 \n");
                 float frhs = *rhs;
                 uint _lhs = *cast(uint*)&frhs;
                 *lhsRef = _lhs;
@@ -2214,7 +1623,6 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_FAdd32:
             {
-                printf("LongInst_FAdd32\n");
                  uint32_t _lhs = *lhsRef & UINT32_MAX;
                 float flhs = *(float*)&_lhs;
                  uint32_t _rhs = *rhs & UINT32_MAX;
@@ -2228,7 +1636,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FSub32:
             {
-                printf("LongInst_FSub32\n");
                  uint32_t _lhs = *lhsRef & UINT32_MAX;
                 float flhs = *(float*)&_lhs;
                  uint32_t _rhs = *rhs & UINT32_MAX;
@@ -2242,7 +1649,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FMul32:
             {
-                printf("LongInst_FMul32\n");
                  uint32_t _lhs = *lhsRef & UINT32_MAX;
                 float flhs = *(float*)&_lhs;
                  uint32_t _rhs = *rhs & UINT32_MAX;
@@ -2256,7 +1662,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FDiv32:
             {
-                printf("LongInst_FDiv32\n");
                  uint32_t _lhs = *lhsRef & UINT32_MAX;
                 float flhs = *(float*)&_lhs;
                  uint32_t _rhs = *rhs & UINT32_MAX;
@@ -2270,7 +1675,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FMod32:
             {
-                printf("LongInst_FMod32\n");
                  uint32_t _lhs = *lhsRef & UINT32_MAX;
                 float flhs = *(float*)&_lhs;
                  uint32_t _rhs = *rhs & UINT32_MAX;
@@ -2284,7 +1688,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FEq64 :
             {
-                printf("LongInst_FEq64 \n");
                 uint64_t _lhs = *lhsRef;
                 double flhs = *(double*)&_lhs;
                 uint64_t _rhs = *rhs;
@@ -2295,7 +1698,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FNeq64 :
             {
-                printf("LongInst_FNeq64 \n");
                 uint64_t _lhs = *lhsRef;
                 double flhs = *(double*)&_lhs;
                 uint64_t _rhs = *rhs;
@@ -2306,7 +1708,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FLt64 :
             {
-                printf("LongInst_FLt64 \n");
                 uint64_t _lhs = *lhsRef;
                 double flhs = *(double*)&_lhs;
                 uint64_t _rhs = *rhs;
@@ -2317,7 +1718,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FLe64 :
             {
-                printf("LongInst_FLe64 \n");
                 uint64_t _lhs = *lhsRef;
                 double flhs = *(double*)&_lhs;
                 uint64_t _rhs = *rhs;
@@ -2328,7 +1728,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FGt64 :
             {
-                printf("LongInst_FGt64 \n");
                 uint64_t _lhs = *lhsRef;
                 double flhs = *(double*)&_lhs;
                 uint64_t _rhs = *rhs;
@@ -2339,7 +1738,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FGe64 :
             {
-                printf("LongInst_FGe64 \n");
                 uint64_t _lhs = *lhsRef;
                 double flhs = *(double*)&_lhs;
                 uint64_t _rhs = *rhs;
@@ -2351,7 +1749,6 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_F64ToF32 :
             {
-                printf("LongInst_F64ToF32 \n");
                 double frhs = *cast(double*)rhs;
                 float flhs = frhs;
                 *lhsRef = *(uint32_t*)&flhs;
@@ -2359,14 +1756,12 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_F64ToI :
             {
-                printf("LongInst_F64ToI \n");
                 float frhs = *(double*)rhs;
                 *lhsRef = (int64_t)frhs;
             }
             break;
         case LongInst_IToF64 :
             {
-                printf("LongInst_IToF64 \n");
                 double frhs = (double)*rhs;
                 *lhsRef = *(int64_t*)&frhs;
             }
@@ -2374,7 +1769,6 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_FAdd64:
             {
-                printf("LongInst_FAdd64\n");
                 uint64_t _lhs = *lhsRef;
                 double flhs = *(double*)&_lhs;
                 uint64_t _rhs = *rhs;
@@ -2388,7 +1782,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FSub64:
             {
-                printf("LongInst_FSub64\n");
                 uint64_t _lhs = *lhsRef;
                 double flhs = *(double*)&_lhs;
                 uint64_t _rhs = *rhs;
@@ -2402,7 +1795,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FMul64:
             {
-                printf("LongInst_FMul64\n");
                 uint64_t _lhs = *lhsRef;
                 double flhs = *(double*)&_lhs;
                 uint64_t _rhs = *rhs;
@@ -2416,7 +1808,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FDiv64:
             {
-                printf("LongInst_FDiv64\n");
                 uint64_t _lhs = *lhsRef;
                 double flhs = *(double*)&_lhs;
                 uint64_t _rhs = *rhs;
@@ -2430,7 +1821,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_FMod64:
             {
-                printf("LongInst_FMod64\n");
                 uint64_t _lhs = *lhsRef;
                 double flhs = *(double*)&_lhs;
                 uint64_t _rhs = *rhs;
@@ -2445,7 +1835,6 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_Assert:
             {
-                printf("LongInst_Assert\n");
                 if (*opRef == 0)
                 {
                     BCValue retval = imm32(hi);
@@ -2456,7 +1845,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_Eq:
             {
-                printf("LongInst_Eq\n");
                 if ((*lhsRef) == *rhs)
                 {
                     cond = true;
@@ -2471,7 +1859,6 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_Neq:
             {
-                printf("LongInst_Neq\n");
                 if ((*lhsRef) != *rhs)
                 {
                     cond = true;
@@ -2485,14 +1872,12 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_Set:
             {
-                printf("LongInst_Set\n");
                 (*lhsRef) = *rhs;
             }
             break;
 
         case LongInst_Ult:
             {
-                printf("LongInst_Ult\n");
                 if (((uint64_t)(*lhsRef)) < ((uint64_t)*rhs))
                 {
                     cond = true;
@@ -2505,7 +1890,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_Ugt:
             {
-                printf("LongInst_Ugt\n");
                 if ((uint64_t)(*lhsRef) > (uint64_t)*rhs)
                 {
                     cond = true;
@@ -2518,7 +1902,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_Ule:
             {
-                printf("LongInst_Ule\n");
                 if (((uint64_t)(*lhsRef)) <= ((uint64_t)*rhs))
                 {
                     cond = true;
@@ -2531,7 +1914,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_Uge:
             {
-                printf("LongInst_Uge\n");
                 if (((uint64_t)(*lhsRef)) >= ((uint64_t)*rhs))
                 {
                     cond = true;
@@ -2546,7 +1928,6 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_Lt:
             {
-                printf("LongInst_Lt\n");
                 if ((*lhsRef) < *rhs)
                 {
                     cond = true;
@@ -2559,7 +1940,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_Gt:
             {
-                printf("LongInst_Gt\n");
                 if ((*lhsRef) > *rhs)
                 {
                     cond = true;
@@ -2572,7 +1952,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_Le:
             {
-                printf("LongInst_Le\n");
                 if ((*lhsRef) <= *rhs)
                 {
                     cond = true;
@@ -2586,7 +1965,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_Ge:
             {
-                printf("LongInst_Ge\n");
                 if ((*lhsRef) >= *rhs)
                 {
                     cond = true;
@@ -2601,7 +1979,6 @@ LongInst)(lw & INSTMASK))
 #if 0
         case LongInst_PushCatch:
             {
-                printf("LongInst_PushCatch\n");
                 debug
                 {
                     printf("PushCatch is executing\n");
@@ -2613,7 +1990,6 @@ LongInst)(lw & INSTMASK))
 
             case LongInst_PopCatch:
             {
-                printf("LongInst_PopCatch\n");
                 debug { if (!__ctfe) writeln("Poping a Catch"); }
                 catches = catches[0 .. $-1];
             }
@@ -2621,7 +1997,6 @@ LongInst)(lw & INSTMASK))
 
             case LongInst_Throw:
             {
-                printf("LongInst_Throw\n");
                 uint expP = ((*opRef) & UINT32_MAX);
                 auto expTypeIdx = heapPtr->heapData[expP + ClassMetaData.TypeIdIdxOffset];
                 auto expValue = BCValue(HeapAddr(expP), BCType(BCTypeEnum_Class, expTypeIdx));
@@ -2635,13 +2010,11 @@ LongInst)(lw & INSTMASK))
 #endif
         case LongInst_Jmp:
             {
-                printf("LongInst_Jmp\n");
                 state.ip = hi;
             }
             break;
         case LongInst_JmpNZ:
             {
-                printf("LongInst_JmpNZ\n");
                 if ((*lhsStackRef) != 0)
                 {
                     state.ip = hi;
@@ -2650,7 +2023,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_JmpZ:
             {
-                printf("LongInst_JmpZ\n");
                 if ((*lhsStackRef) == 0)
                 {
                     state.ip = hi;
@@ -2659,7 +2031,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_JmpFalse:
             {
-                printf("LongInst_JmpFalse\n");
                 if (!cond)
                 {
                     state.ip = hi;
@@ -2668,7 +2039,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_JmpTrue:
             {
-                printf("LongInst_JmpTrue\n");
                 if (cond)
                 {
                     state.ip = hi;
@@ -2678,14 +2048,12 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_HeapLoad8:
             {
-                printf("LongInst_HeapLoad8\n");
                 assert(*rhs);//, "trying to deref null pointer inLine: " ~ itos(lastLine));
                 (*lhsRef) = heapPtr->heapData[*rhs];
             }
             break;
         case LongInst_HeapStore8:
             {
-                printf("LongInst_HeapStore8\n");
                 assert(*lhsRef);//, "trying to deref null pointer SP[" ~ itos(cast(int)((lhsRef - &stackP[0])*4)) ~ "] at : &" ~ itos (ip - 2));
                 heapPtr->heapData[*lhsRef] = ((*rhs) & 0xFF);
             }
@@ -2693,7 +2061,6 @@ LongInst)(lw & INSTMASK))
 
             case LongInst_HeapLoad16:
             {
-                printf("LongInst_HeapLoad16\n");
                 assert(*rhs);//, "trying to deref null pointer inLine: " ~ itos(lastLine));
                 const long addr = *lhsRef;
                 (*lhsRef) =  heapPtr->heapData[addr]
@@ -2703,7 +2070,6 @@ LongInst)(lw & INSTMASK))
             break;
             case LongInst_HeapStore16:
             {
-                printf("LongInst_HeapStore16\n");
                 assert(*lhsRef);//, "trying to deref null pointer SP[" ~ itos(cast(int)((lhsRef - &stackP[0])*4)) ~ "] at : &" ~ itos (ip - 2));
                 const uint32_t addr = *lhsRef;
                 heapPtr->heapData[addr    ] = ((*rhs     ) & 0xFF);
@@ -2713,14 +2079,12 @@ LongInst)(lw & INSTMASK))
 
             case LongInst_HeapLoad32:
             {
-                printf("LongInst_HeapLoad32\n");
                 assert(*rhs); //, "trying to deref null pointer inLine: " ~ itos(lastLine));
                 (*lhsRef) = loadu32(heapPtr->heapData + *rhs);
             }
             break;
         case LongInst_HeapStore32:
             {
-                printf("LongInst_HeapStore32\n");
                 assert(*lhsRef);//, "trying to deref null pointer SP[" ~ itos(cast(int)((lhsRef - &stackP[0])*4)) ~ "] at : &" ~ itos (ip - 2));
                 //(*(heapPtr->heapData.ptr + *lhsRef)) = (*rhs) & 0xFF_FF_FF_FF;
                 storeu32((&heapPtr->heapData[*lhsRef]),  (*rhs) & UINT32_MAX);
@@ -2729,7 +2093,6 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_HeapLoad64:
             {
-                printf("LongInst_HeapLoad64\n");
                 assert(*rhs);//, "trying to deref null pointer ");
                 const uint32_t addr = *rhs;
                 uint64_t value = loadu32(&heapPtr->heapData[addr + 4]);
@@ -2742,7 +2105,6 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_HeapStore64:
             {
-                printf("LongInst_HeapStore64\n");
                 assert(*lhsRef);//, "trying to deref null pointer SP[" ~ itos(cast(int)(lhsRef - &stackP[0])*4) ~ "] at : &" ~ itos (ip - 2));
                 const int64_t heapOffset = *lhsRef;
                 assert(heapOffset < heapPtr->heapSize);//, "Store out of range at ip: &" ~ itos(ip - 2) ~ " atLine: " ~ itos(lastLine));
@@ -2757,21 +2119,18 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_Ret32:
             {
-                printf("LongInst_Ret32\n");
                 state.cRetval = imm32(*opRef & UINT32_MAX);
                 if (BCInterpreter_Return(&state)) return state.cRetval;
             }
             break;
         case LongInst_RetS32:
             {
-                printf("LongInst_RetS32\n");
                 state.cRetval = imm32_(*opRef & UINT32_MAX, true);
                 if (BCInterpreter_Return(&state)) return state.cRetval;
             }
             break;
         case LongInst_RetS64:
             {
-                printf("LongInst_RetS64\n");
                 state.cRetval = imm64_(*opRef, true);
                 if (BCInterpreter_Return(&state)) return state.cRetval;
             }
@@ -2779,55 +2138,47 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_Ret64:
             {
-                printf("LongInst_Ret64\n");
                 state.cRetval = imm64_(*opRef, false);
                 if (BCInterpreter_Return(&state)) return state.cRetval;
             }
             break;
         case LongInst_RelJmp:
             {
-                printf("LongInst_RelJmp\n");
                 state.ip += (cast(short)(lw >> 16)) - 2;
             }
             break;
         case LongInst_PrintValue:
             {
-                printf("LongInst_PrintValue\n");
                 if ((lw & UINT16_MAX) >> 8)
                 {
                     long offset = *opRef;
                     uint8_t length = heapPtr->heapData[offset];
                     char* string_start = cast(char*)&heapPtr->heapData[offset + 1];
-                    printf("Printing string: '%.*s'\n", length, string_start);
                 }
                 else
                 {
-                    printf("Addr: %lu, Value %lx\n", (opRef - stackP) * 4, *opRef);
+                    //TODO readd print!
                 }
             }
             break;
         case LongInst_Not:
             {
-                printf("LongInst_Not\n");
                 (*opRef) = ~(*opRef);
             }
             break;
         case LongInst_Flg:
             {
-                printf("LongInst_Flg\n");
                 (*opRef) = cond;
             }
             break;
 
         case LongInst_BuiltinCall:
             {
-                printf("LongInst_BuiltinCall\n");
                 assert(0);//, "Unsupported right now: BCBuiltin");
             }
 #if 0
         case LongInst_Cat:
             {
-                printf("LongInst_Cat\n");
                 if (*rhs == 0 && *lhsRef == 0)
                 {
                     *lhsStackRef = 0;
@@ -2903,7 +2254,6 @@ LongInst)(lw & INSTMASK))
 #endif
         case LongInst_Call:
             {
-                printf("LongInst_Call\n");
                 assert(self->functions);//, "When calling functions you need functions to call");
                 RetainedCall call = self->calls[(*rhs & UINT32_MAX) - 1];
                 ReturnAddr returnAddr = {state.ip, state.fnIdx, call.callerSp.addr, lhsRef};
@@ -2958,7 +2308,6 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_Alloc:
             {
-                printf("LongInst_Alloc\n");
                 const uint32_t allocSize = *rhs;
                 const uint32_t heapSize = heapPtr->heapSize;
 
@@ -2985,7 +2334,6 @@ LongInst)(lw & INSTMASK))
             break;
         case LongInst_MemCpy:
             {
-                printf("LongInst_MemCpy\n");
                 uint32_t cpySize = cast(uint32_t) *opRef;
                 uint32_t cpySrc = cast(uint32_t) *rhs;
                 uint32_t cpyDst = cast(uint32_t) *lhsRef;
@@ -3014,7 +2362,6 @@ LongInst)(lw & INSTMASK))
 
         case LongInst_Comment:
             {
-                printf("LongInst_Comment\n");
 L_LongInst_Comment:
                 state.ip += align4(hi) / 4;
             }
@@ -3022,7 +2369,6 @@ L_LongInst_Comment:
 #if 0
         case LongInst_StrEq:
             {
-                printf("LongInst_Comment\n");
                 cond = false;
 
                 uint32_t _lhs = cast(uint)*lhsRef;
@@ -3057,12 +2403,10 @@ L_LongInst_Comment:
 #endif
         case LongInst_File :
             {
-                printf("LongInst_File \n");
                 goto L_LongInst_Comment;
             }
         case LongInst_Line :
             {
-                printf("LongInst_Line \n");
                 uint32_t breakingOn;
                 uint32_t line = hi;
                 state.lastLine = line;
@@ -3089,7 +2433,6 @@ L_LongInst_Comment:
     }
     BCValue bailoutValue;
 Lbailout :
-    printf("Bailing\n");
     bailoutValue.vType = BCValueType_Bailout;
     
     return bailoutValue;
@@ -3416,9 +2759,9 @@ static inline BCValue BCGen_pushOntoStack(BCGen* self, BCValue val)
         BCValue stackref;
         stackref.type = val.type;
         stackref.vType = BCValueType_StackValue;
-        stackref.stackAddr.addr = BCGen_currSp(self);
+        stackref.stackAddr.addr = self->sp;
+        stackref.temporaryIndex = ++self->temporaryCount;
 
-        assert(BCValue_isStackValueOrParameter(&stackref));
         BCGen_Set(self, u32(stackref), val);
 
         self->sp += align4(BCTypeEnum_basicTypeSize(val.type.type));
@@ -3549,7 +2892,7 @@ static inline void BCGen_Add3(BCGen* self, BCValue result, BCValue lhs, BCValue 
 
 static inline void BCGen_Ret(BCGen*self, BCValue val)
 {
-    LongInst inst = BCTypeEnum_basicTypeSize(val.type.type) == 8 ? LongInst_Ret64 : LongInst_Ret32;
+    LongInst inst = ((BCTypeEnum_basicTypeSize(val.type.type) == 8) ? LongInst_Ret64 : LongInst_Ret32);
     val = BCGen_pushOntoStack(self, val);
 
     if (BCValue_isStackValueOrParameter(&val))
