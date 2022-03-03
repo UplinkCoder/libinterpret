@@ -113,8 +113,10 @@ cstring BCTypeEnum_toChars(BCTypeEnum* self)
 
     case BCTypeEnum_Slice:
         return "BCTypeEnum_Slice";
-
     }
+
+    assert(0);
+    return 0;
 }
 
 const char* BCTypeFlags_toChars(BCTypeFlags* self)
@@ -124,6 +126,9 @@ const char* BCTypeFlags_toChars(BCTypeFlags* self)
 
     if ((*self & (1 << 0)) != 0)
         return "Const";
+
+    assert(0);
+    return 0;
 }
 
 const char* BCType_toChars(BCType* self)
@@ -656,7 +661,7 @@ EXTERN_C bool BCType_isBasicBCType(BCType bct)
             || bct.type == BCTypeEnum_AArray);
 }
 
-EXTERN_C BCValue i32(BCValue v)
+EXTERN_C BCValue  i32(BCValue v)
 {
     v.type.type = BCTypeEnum_i32;
     return v;
@@ -818,6 +823,7 @@ EXTERN_C BCValue imm32_(uint32_t value, bool signed_)
     ret.type.type = signed_ ? BCTypeEnum_i32 : BCTypeEnum_u32;
     ret.type.typeIndex = 0;
     ret.type.flags = BCTypeFlags_None;
+    ret.name = 0;
     ret.imm32.imm32 = value;
 
     ret.imm64.imm64 &= UINT32_MAX;
@@ -832,6 +838,7 @@ EXTERN_C BCValue imm64_(uint64_t value, bool signed_)
     ret.type.type = signed_ ? BCTypeEnum_i64 : BCTypeEnum_u64;
     ret.type.typeIndex = 0;
     ret.type.flags = BCTypeFlags_None;
+    ret.name = 0;
     ret.imm64.imm64 = value;
     return ret;
 }

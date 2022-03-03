@@ -1,3 +1,6 @@
+#ifndef _BC_COMMON_H_
+#define _BC_COMMON_H_ 1
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
@@ -5,12 +8,10 @@
 #include <stdio.h>
 #include <string.h>
 
-#pragma once
-
 #ifdef __cplusplus
-#define EXTERN_C extern "C"
+#  define EXTERN_C extern "C"
 #else
-#define EXTERN_C extern
+#  define EXTERN_C extern
 #endif
 
 #undef  offsetof
@@ -200,7 +201,7 @@ typedef struct BCValue
         void* voidStar;
     };
     //TODO PERF minor: use a 32bit value for heapRef;
-    
+
 #ifdef __cplusplus
     uint32_t toUint();
 
@@ -246,6 +247,32 @@ struct CndJmpBegin
     bool ifTrue;
 };
 
+#define stackAddrMask  ((1 << 31) | \
+                        (1 << 30) | \
+                        (1 << 29) | \
+                        (1 << 28) | \
+                        (1 << 27) | \
+                        (1 << 26))
+
+static inline bool isStackAddress(uint32_t unrealPointer)
+{
+    // a stack address has the upper 4 bits set
+    return (unrealPointer & stackAddrMask) == stackAddrMask;
+}
+
+static bool isHeapAddress(uint32_t unrealPointer)
+{
+    // a heap address does not have the upper 3 bits set
+    return (unrealPointer & stackAddrMask) != stackAddrMask;
+}
+
+static inline uint32_t toStackOffset(uint32_t unrealPointer)
+{
+    assert(isStackAddress(unrealPointer));
+    return (unrealPointer & ~stackAddrMask);
+}
+
+
 CONSTEXPR static inline const uint32_t align4(const uint32_t val)
 {
     return ((val + 3) & ~3);
@@ -262,9 +289,9 @@ static inline void storeu32(uint8_t* ptr, const uint32_t v32)
 static inline uint32_t loadu32(const uint8_t* ptr)
 {
     uint32_t v32 = (ptr[0] << 0)
-             | (ptr[1] << 8)
-             | (ptr[2] << 16)
-             | (ptr[3] << 24);
+                 | (ptr[1] << 8)
+                 | (ptr[2] << 16)
+                 | (ptr[3] << 24);
     return v32;
 }
 
@@ -361,7 +388,7 @@ EXTERN_C bool BCType_isFloat(BCType bct);
 EXTERN_C bool BCType_isBasicBCType(BCType bct);
 
 EXTERN_C bool BCValue_isStackValueOrParameter(const BCValue* val);
-
+#if 0
 struct RegStatusList
 {
 #define STRUCT_NAME RegStatusList
@@ -380,7 +407,7 @@ struct RegStatusList
         dirtyBitfield = 0;
         freeBitfield = ((1 << NREGS) - 1);
     }
-    
+
     inline uint32_t nextFree()
     {
         uint result = 0;
@@ -388,7 +415,7 @@ struct RegStatusList
             result = bsf(freeBitfield) + 1;
         return result;
     }
-    
+
     inline uint32_t nextUnused()
     {
         uint result = 0;
@@ -396,7 +423,7 @@ struct RegStatusList
             result = bsf(unusedBitfield) + 1;
         return result;
     }
-    
+
     inline uint32_t nextDirty()
     {
         uint result = 0;
@@ -404,27 +431,27 @@ struct RegStatusList
             result = bsf(dirtyBitfield) + 1;
         return result;
     }
-    
+
     inline uint32_t n_free()
     {
         assert(popcnt(freeBitfield) <= NREGS);
         return popcnt(freeBitfield);
     }
-    
+
     /// mark register as unoccupied
     inline void markFree(int regIdx)
     {
         assert(regIdx && regIdx <= NREGS);
         freeBitfield |= (1 << (regIdx - 1));
     }
-    
+
     /// mark register as eviction canidate
     inline void markUnused(int regIdx)
     {
         assert(regIdx && regIdx <= NREGS);
         unusedBitfield |= (1 << (regIdx - 1));
     }
-    
+
     /// mark register as used
     inline void markUsed(int regIdx)
     {
@@ -432,13 +459,13 @@ struct RegStatusList
         freeBitfield &= ~(1 << (regIdx - 1));
         unusedBitfield &= ~(1 << (regIdx - 1));
     }
-    
+
     inline void markClean(int regIdx)
     {
         assert(regIdx && regIdx <= NREGS);
         dirtyBitfield &= ~(1 << (regIdx - 1));
     }
-    
+
     inline void markDirty(int regIdx)
     {
         assert(regIdx && regIdx <= NREGS);
@@ -465,6 +492,7 @@ struct RegStatusList
 #endif
 } STRUCT_NAME;
 #undef STRUCT_NAME
+#endif
 
 EXTERN_C const uint8_t toParamCode(const BCValue val);
 
@@ -530,7 +558,6 @@ typedef struct Imm52f
 
 typedef struct BCBlock
 {
-
     BCLabel begin;
     BCLabel end;
 } BCBlock;
@@ -670,3 +697,4 @@ EXTERN_C BCTypeEnum BCTypeEnum_commonTypeEnum(BCTypeEnum lhs, BCTypeEnum rhs);
 #undef offsetof
 
 static const BCType BCType_i32 = {BCTypeEnum_i32}; 
+#endif
