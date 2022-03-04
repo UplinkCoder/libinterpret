@@ -106,6 +106,7 @@ typedef enum LongInst
     LongInst_ImmLsh,
     LongInst_ImmRsh,
 
+#define FLT32_BEGIN LongInst_FAdd32
     LongInst_FAdd32,
     LongInst_FSub32,
     LongInst_FDiv32,
@@ -117,10 +118,13 @@ typedef enum LongInst
     LongInst_FLe32,
     LongInst_FGt32,
     LongInst_FGe32,
+#define FLT32_END LongInst_FGe32
+
     LongInst_F32ToF64,
     LongInst_F32ToI,
     LongInst_IToF32,
 
+#define FLT64_BEGIN LongInst_FAdd32
     LongInst_FAdd64,
     LongInst_FSub64,
     LongInst_FDiv64,
@@ -132,6 +136,8 @@ typedef enum LongInst
     LongInst_FLe64,
     LongInst_FGt64,
     LongInst_FGe64,
+#define FLT64_END LongInst_FGe64
+
     LongInst_F64ToF32,
     LongInst_F64ToI,
     LongInst_IToF64,
@@ -176,7 +182,7 @@ typedef enum LongInst
 * [0-6] Instruction
 * [6-7] Unused
 * ------------------------
-* [8-15] Unused
+* [8-16] Unused
 * [16-32] Register (lhs)
 * [32-64] Imm32 (rhs)
 ****************************
@@ -184,7 +190,7 @@ typedef enum LongInst
 * [0-6] Instruction
 * [6-7] Unused
 * -----------------
-* [16-32]  Register (extra_data)
+* [16-32] Register (extra_data)
 * [32-48] Register (lhs)
 * [48-64] Register (rhs) 
 
@@ -192,7 +198,7 @@ typedef enum LongInst
 
 // static_assert(LongInst_max < INSTMASK);
 
-static short BCGen_isShortJump(const int offset)
+static int16_t BCGen_isShortJump(const int offset)
 {
     assert(offset != 0);//, "A Jump to the Jump itself is invalid");
 
@@ -1292,6 +1298,25 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
         int64_t* lhsStackRef = (&stackP[(opRefOffset / 4)]);
         int64_t* opRef = &stackP[(opRefOffset / 4)];
 
+        float flhs;
+        float frhs;
+
+        double drhs;
+        double dlhs;
+
+        if ((lw & INSTMASK) >= FLT32_BEGIN && (lw & INSTMASK) <= FLT32_END)
+        {
+            uint32_t _lhs = *lhsRef & UINT32_MAX;
+            flhs = *(float*)&_lhs;
+            uint32_t _rhs = *rhs & UINT32_MAX;
+            frhs = *(float*)&_rhs;
+        }
+        else if ((lw & INSTMASK) >= FLT64_BEGIN && (lw & INSTMASK) <= FLT64_END)
+        {
+            dlhs = *(double*)lhsRef;
+            drhs = *(double*)rhs;
+        }
+
         bool cond;
 
         if (!lw)
@@ -1593,61 +1618,31 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_FGt32 :
             {
-                uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
                 cond = flhs > frhs;
             }
             break;
         case LongInst_FGe32 :
             {
-                uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
                 cond = flhs >= frhs;
             }
             break;
         case LongInst_FEq32 :
             {
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
                 cond = flhs == frhs;
             }
             break;
         case LongInst_FNeq32 :
             {
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
                 cond = flhs != frhs;
             }
             break;
         case LongInst_FLt32 :
             {
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
                 cond = flhs < frhs;
             }
             break;
         case LongInst_FLe32 :
             {
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
                 cond = flhs <= frhs;
             }
             break;
@@ -1661,10 +1656,9 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_F32ToI :
             {
-                uint rhs32 = (*rhs & UINT32_MAX);
+                uint32_t rhs32 = (*rhs & UINT32_MAX);
                 float frhs = *cast(float*)&rhs32;
-                uint _lhs = cast(int)frhs;
-                *lhsRef = _lhs;
+                *lhsRef = cast(int32_t)frhs;
             }
             break;
         case LongInst_IToF32 :
@@ -1677,213 +1671,116 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 
         case LongInst_FAdd32:
             {
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
                 flhs += frhs;
 
-                _lhs = *(uint32_t*)&flhs;
-                *lhsRef = _lhs;
+                *lhsRef = *(uint32_t*)&flhs;
             }
             break;
         case LongInst_FSub32:
             {
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
                 flhs -= frhs;
-
-                _lhs = *(uint32_t*)&flhs;
-                *lhsRef = _lhs;
+                *lhsRef = *(uint32_t*)&flhs;
             }
             break;
         case LongInst_FMul32:
             {
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
                 flhs *= frhs;
-
-                _lhs = *(uint32_t*)&flhs;
-                *lhsRef = _lhs;
+                *lhsRef = *(uint32_t*)&flhs;
             }
             break;
         case LongInst_FDiv32:
             {
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
                 flhs /= frhs;
-
-                _lhs = *(uint32_t*)&flhs;
-                *lhsRef = _lhs;
+                *lhsRef = *(uint32_t*)&flhs;
             }
             break;
         case LongInst_FMod32:
             {
-                 uint32_t _lhs = *lhsRef & UINT32_MAX;
-                float flhs = *(float*)&_lhs;
-                 uint32_t _rhs = *rhs & UINT32_MAX;
-                float frhs = *(float*)&_rhs;
-
                 flhs = fmodf(flhs, frhs);
-
-                _lhs = *(uint32_t*)&flhs;
-                *lhsRef = _lhs;
+                *lhsRef = *(uint32_t*)&flhs;
             }
             break;
         case LongInst_FEq64 :
             {
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                cond = flhs == frhs;
+                cond = dlhs == drhs;
             }
             break;
         case LongInst_FNeq64 :
             {
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                cond = flhs < frhs;
+                cond = dlhs < drhs;
             }
             break;
         case LongInst_FLt64 :
             {
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                cond = flhs < frhs;
+                cond = dlhs < drhs;
             }
             break;
         case LongInst_FLe64 :
             {
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                cond = flhs <= frhs;
+                cond = dlhs <= drhs;
             }
             break;
         case LongInst_FGt64 :
             {
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                cond = flhs > frhs;
+                cond = dlhs > drhs;
             }
             break;
         case LongInst_FGe64 :
             {
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                cond = flhs >= frhs;
+                cond = dlhs >= drhs;
             }
             break;
 
         case LongInst_F64ToF32 :
             {
-                double frhs = *cast(double*)rhs;
-                float flhs = frhs;
-                *lhsRef = *(uint32_t*)&flhs;
+                double drhs_ = *cast(double*)rhs;
+                float flhs_ = drhs_;
+                *lhsRef = *(uint32_t*)&flhs_;
             }
             break;
         case LongInst_F64ToI :
             {
-                float frhs = *(double*)rhs;
-                *lhsRef = (int64_t)frhs;
+                float drhs_ = *(double*)rhs;
+                *lhsRef = (int64_t)drhs_;
             }
             break;
         case LongInst_IToF64 :
             {
-                double frhs = (double)*rhs;
-                *lhsRef = *(int64_t*)&frhs;
+                double drhs_ = (double)*rhs;
+                *lhsRef = *(int64_t*)&drhs_;
             }
             break;
 
         case LongInst_FAdd64:
             {
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                flhs += frhs;
-
-                _lhs = *(uint64_t*)&flhs;
-                *lhsRef = _lhs;
+                dlhs += drhs;
+                *lhsRef = *(uint64_t*)&dlhs;
             }
             break;
         case LongInst_FSub64:
             {
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                flhs -= frhs;
-
-                _lhs = *(uint64_t*)&flhs;
-                *lhsRef = _lhs;
+                dlhs -= drhs;
+                *lhsRef = *(uint64_t*)&dlhs;
             }
             break;
         case LongInst_FMul64:
             {
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
-
-                flhs *= frhs;
-
-                _lhs = *cast(uint64_t*)&flhs;
-                *lhsRef = _lhs;
+                dlhs *= drhs;
+                *lhsRef = *(uint64_t*)&dlhs;
             }
             break;
         case LongInst_FDiv64:
             {
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
+                dlhs /= drhs;
 
-                flhs /= frhs;
-
-                _lhs = *cast(uint64_t*)&flhs;
-                *(cast(uint64_t*)lhsRef) = _lhs;
+                *(cast(uint64_t*)lhsRef) = *cast(uint64_t*)&dlhs;
             }
             break;
         case LongInst_FMod64:
             {
-                uint64_t _lhs = *lhsRef;
-                double flhs = *(double*)&_lhs;
-                uint64_t _rhs = *rhs;
-                double frhs = *(double*)&_rhs;
+                dlhs = fmod(dlhs, drhs);
 
-                flhs = fmod(flhs, frhs);
-
-                _lhs = *cast(uint64_t*)&flhs;
-                *(cast(uint64_t*)lhsRef) = _lhs;
+                *(cast(uint64_t*)lhsRef) = *cast(uint64_t*)&dlhs;
             }
             break;
 
@@ -2346,11 +2243,12 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 
                 if (state.callDepth++ == max_call_depth)
                 {
-                        BCValue bailoutValue;
-                        bailoutValue.vType = BCValueType_Bailout;
-                        bailoutValue.imm32.imm32 = 2000;
-                        return bailoutValue;
+                    BCValue bailoutValue;
+                    bailoutValue.vType = BCValueType_Bailout;
+                    bailoutValue.imm32.imm32 = 2000;
+                    return bailoutValue;
                 }
+
                 {
                     state.returnAddrs[state.n_return_addrs++] = returnAddr;
                     state.stackTop = state.stackTop + (call.callerSp.addr / 4);
@@ -2492,20 +2390,6 @@ Lbailout :
     return bailoutValue;
 }
 
-/*
-static inline BCValue BCGen_Interpret(BCGen* self, BCValue* args, uint32_t n_args, BCHeap* heapPtr)
-{
-    BCFunction f = {self->fd,
-        1,
-        BCFunctionTypeEnum_Bytecode,
-        self->parameterCount,
-        (ushort)(self->temporaryCount + self->localCount + self->parameterCount),
-        self->byteCodeArray
-    };
-
-    return BCGen_interpret_(0, args, n_args, heapPtr, &f, &self->calls[0]);
-}
-*/
 static void inline BCGen_emit2_at(BCGen* self, uint32_t low, uint32_t high, uint32_t atIp)
 {
     uint* codeP;
@@ -2685,10 +2569,12 @@ static inline void BCGen_endFunction(BCGen* self, uint32_t fIdx)
     f->type = BCFunctionTypeEnum_Bytecode;
     f->maxStackUsed = self->sp;
     f->fn = self->functionIdx;
+    f->nArgs = self->parameterCount;
     f->bytecode_end = self->ip;
 
     self->sp = 4;
     self->fd = 0;
+    self->parameterCount = 0;
 }
 
 static inline BCValue BCGen_genLocal(BCGen* self, BCType bct, const char* name)
@@ -3007,6 +2893,12 @@ void endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         BCGen_emit2_at(self, LongInst_Jmp, target.addr.addr, atIp.addr);
     }
 }
+
+#undef FLT32_BEGIN
+#undef FLT32_END
+
+#undef FLT64_BEGIN
+#undef FLT64_END
 
 #if 0
 /*
