@@ -431,13 +431,6 @@ void PrintCode(IntIter* iter)
         const uint32_t opRefOffset = (lw >> 16) & 0xFFFF;
         const uint32_t lhsOffset   = hi & 0xFFFF;
         const uint32_t rhsOffset   = (hi >> 16) & 0xFFFF;
-/*
-        int64_t* lhsRef = (&stackP[(lhsOffset / 4)]);
-        int64_t* rhs = (&stackP[(rhsOffset / 4)]);
-        int64_t* lhsStackRef = (&stackP[(opRefOffset / 4)]);
-        int64_t* opRef = &stackP[(opRefOffset / 4)];
-*/
-        bool cond;
 
         if (!lw)
         {

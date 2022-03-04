@@ -162,7 +162,7 @@ typedef struct BCHeapRef
     };
 
     const char* name;
-#ifdef __cplusplus
+#if 0
     operator bool();
 
     STRUCT_NAME(const BCValue that);
@@ -202,7 +202,7 @@ typedef struct BCValue
     };
     //TODO PERF minor: use a 32bit value for heapRef;
 
-#ifdef __cplusplus
+#if 0
     uint32_t toUint();
 
     const char* toChars();

@@ -61,17 +61,22 @@ int main(int argc, char* argv[])
 
     /// how many funcion pointer types are defined 
     int n_functions = 0;
-
-    // first let's count the occourcenes of '(*'
-    for(char *cp = backend_funcs_h, c = *cp++; c; c = *cp++)
     {
-        if (c == '(')
+        char *op = backend_funcs_h, *cp;
+        int remaining_length = f_length;
+        // first let's count the occourcenes of '(*'
+        for(;;)
         {
+            cp = memchr(op, '(', remaining_length);
+            if (!cp)
+                break;
+            ++cp;
             if (*cp == '*')
             {
-                cp++;
                 n_functions++;
             }
+            remaining_length -= (cp - op);
+            op = cp;
         }
     }
 
@@ -130,12 +135,14 @@ int main(int argc, char* argv[])
             }
         }
     }
+
     // now we scan the exisiting implementation if there is one
 
     for(int i = 0; i < n_parsed; i++)
     {
         if (argc == 3)
         {
+            // whatevs
         }
         if (0 != strcmp(function_names[i], "new_instance"))
         {
@@ -144,9 +151,27 @@ int main(int argc, char* argv[])
                 , argv[1]
                 , function_names[i]
                 , argv[1]
-                , parameter_lists[i] + sizeof("void* ctx"));
-            }
+                , parameter_lists[i] + sizeof("void* ctx")
+            );
         }
+    }
+    printf("\nstatic const BackendInterface %s_interface = {\n", argv[1]);
+    // .Initialize = (Initialize_t) BCGen_Initialize,
+    for(int i = 0; i < n_parsed - 1; i++)
+    {
+        printf("    .%s = (%s_t) %s_%s,\n"
+            , function_names[i]
+            , function_names[i]
+            , argv[1]
+            , function_names[i]
+        );
+    }
+    printf("    .%s = (%s_t) %s_%s\n}\n"
+        , function_names[n_parsed -1]
+        , function_names[n_parsed -1]
+        , argv[1]
+        , function_names[n_parsed -1]
+    );
 
     return 0;
 }

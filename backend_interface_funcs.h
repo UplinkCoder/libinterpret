@@ -1,29 +1,29 @@
 #include <stdarg.h>
 #include "bc_common.h"
 
-typedef uint32_t (*beginFunction_t) (void* ctx, uint32_t fnId, void* fd);
-typedef BCValue (*genTemporary_t) (void* ctx, BCType bct);
-typedef void (*destroyTemporary_t) (void* ctx, BCValue tmp);
-typedef BCValue (*genLocal_t) (void* ctx, BCType bct, const char* name);
 typedef void (*Initialize_t) (void* ctx, uint32_t n_args, ...);
 typedef void (*InitializeV_t) (void* ctx, uint32_t n_args, va_list args);
 typedef void (*Finalize_t) (void* ctx);
+
+typedef uint32_t (*beginFunction_t) (void* ctx, uint32_t fnId, void* fd);
 typedef void* (*endFunction_t) (void* ctx, uint32_t fnIdx);
+
+typedef BCValue (*genTemporary_t) (void* ctx, BCType bct);
+typedef void (*destroyTemporary_t) (void* ctx, BCValue tmp);
+
+typedef BCValue (*genLocal_t) (void* ctx, BCType bct, const char* name);
 typedef BCValue (*genParameter_t) (void* ctx, BCType bct, const char*);
-typedef uint32_t (*beginJmp_t) (void* ctx);
-typedef void (*endJmp_t) (void* ctx, BCAddr atIp, BCLabel target);
-typedef BCLabel (*genLabel_t) (void* ctx);
-typedef CndJmpBegin (*beginCndJmp_t) (void* ctx, BCValue cond, bool ifTrue);
-typedef void (*endCndJmp_t) (void* ctx, CndJmpBegin jmp, BCLabel target);
-typedef void (*Jmp_t) (void* ctx, BCLabel target);
 typedef void (*emitFlg_t) (void* ctx, BCValue lhs);
+
 typedef void (*Alloc_t) (void* ctx, BCValue heapPtr, BCValue size);
 typedef void (*Assert_t) (void* ctx, BCValue value, BCValue err);
 typedef void (*MemCpy_t) (void* ctx, BCValue dst, BCValue src, BCValue size);
+
 typedef void (*File_t) (void* ctx, const char* filename);
 typedef void (*Line_t) (void* ctx, uint32_t line);
 typedef void (*Comment_t) (void* ctx, const char* comment);
 typedef void (*Prt_t) (void* ctx, BCValue value, bool isString);
+
 typedef void (*Set_t) (void* ctx, BCValue lhs, BCValue rhs);
 typedef void (*SetHigh_t) (void* ctx, BCValue lhs, BCValue rhs);
 typedef void (*Ult3_t) (void* ctx, BCValue result, BCValue lhs, BCValue rhs);
@@ -49,7 +49,15 @@ typedef void (*Rsh3_t) (void* ctx, BCValue result, BCValue lhs, BCValue rhs);
 typedef void (*Mod3_t) (void* ctx, BCValue result, BCValue lhs, BCValue rhs);
 typedef void (*Umod3_t) (void* ctx, BCValue result, BCValue lhs, BCValue rhs);
 typedef void (*Not_t) (void* ctx, BCValue result, BCValue val);
+
 typedef void (*Call_t) (void* ctx, BCValue result, BCValue fn, BCValue* args, uint32_t n_args);
+typedef BCLabel (*genLabel_t) (void* ctx);
+typedef void (*Jmp_t) (void* ctx, BCLabel target);
+typedef uint32_t (*beginJmp_t) (void* ctx);
+typedef void (*endJmp_t) (void* ctx, BCAddr atIp, BCLabel target);
+typedef CndJmpBegin (*beginCndJmp_t) (void* ctx, BCValue cond, bool ifTrue);
+typedef void (*endCndJmp_t) (void* ctx, CndJmpBegin jmp, BCLabel target);
+
 typedef void (*Load8_t) (void* ctx, BCValue dest, BCValue from);
 typedef void (*Store8_t) (void* ctx, BCValue dest, BCValue value);
 typedef void (*Load16_t) (void* ctx, BCValue dest, BCValue from);
@@ -63,12 +71,14 @@ typedef void (*Throw_t) (void* ctx, BCValue e);
 typedef void (*PushCatch_t) (void* ctx);
 typedef void (*PopCatch_t) (void* ctx);
 typedef void (*Ret_t) (void* ctx, BCValue val);
+
 typedef void (*IToF32_t) (void* ctx, BCValue result, BCValue rhs);
 typedef void (*IToF64_t) (void* ctx, BCValue result, BCValue rhs);
 typedef void (*F32ToI_t) (void* ctx, BCValue result, BCValue rhs);
 typedef void (*F64ToI_t) (void* ctx, BCValue result, BCValue rhs);
 typedef void (*F32ToF64_t) (void* ctx, BCValue result, BCValue rhs);
 typedef void (*F64ToF32_t) (void* ctx, BCValue result, BCValue rhs);
+
 typedef void (*StrEq3_t) (void* ctx, BCValue result, BCValue lhs, BCValue rhs);
 typedef void (*Cat3_t) (void* ctx, BCValue result, BCValue lhs, BCValue rhs, const uint size);
 
@@ -128,6 +138,7 @@ typedef struct BackendInterface
     const Not_t Not;
 
     const Call_t Call;
+    const genLabel_t genLabel;
     const Jmp_t Jmp;
     const beginJmp_t beginJmp;
     const endJmp_t endJmp;
