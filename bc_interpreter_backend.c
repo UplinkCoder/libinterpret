@@ -416,11 +416,11 @@ void PrintCode(IntIter* iter)
     uint32_t ip = 0;
 
     uint32_t lw;
-    while (IntIter_NextInt(iter, &lw))
+    while (IntIter_NextInt(iter, (int32_t*)&lw))
     {
         printf("%d: ", ip);
         uint32_t hi;
-        bool worked = IntIter_NextInt(iter, &hi);
+        bool worked = IntIter_NextInt(iter, (int32_t*)&hi);
         assert(worked);
 
         const int32_t imm32c = (int32_t) hi;
@@ -1132,9 +1132,6 @@ void PrintCode(IntIter* iter)
         case LongInst_Comment:
             {
                 printf("LongInst_Comment [length:%d]\n", align4(hi) / 4);
-                int k = 12;
-L_LongInst_CommentP:
-                k = 2;
             }
             break;
 #if 0
@@ -1176,7 +1173,6 @@ L_LongInst_CommentP:
         case LongInst_File :
             {
                 printf("LongInst_File \n");
-                goto L_LongInst_CommentP;
             }
         case LongInst_Line :
             {
@@ -1211,7 +1207,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 {
     assert(self->finalized);
 
-    BCInterpreter state = {0};
+    BCInterpreter state = {};
     state.ip = 4;
     int64_t* stackP = state.stack;
 
@@ -2268,7 +2264,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
                             heapPtr->heapMax * 4 :
                             align4(cast(uint32_t)(heapPtr->heapMax + allocSize)) * 2);
 
-                        heapPtr->heapData = realloc(heapPtr->heapData, newHeapSize);
+                        heapPtr->heapData = (uint8_t*)realloc(heapPtr->heapData, newHeapSize);
                         heapPtr->heapMax = newHeapSize;
                     }
                 }
@@ -2576,7 +2572,7 @@ static inline BCValue BCGen_genLocal(BCGen* self, BCType bct, const char* name)
     uint16_t localAddr = (uint16_t)sp;
     uint16_t localIdx = ++self->localCount;
 
-    BCValue result = {0};
+    BCValue result = {};
     result.type = bct;
     result.stackAddr.addr = localAddr;
     result.localIndex  = localIdx;
@@ -2758,7 +2754,9 @@ static inline void BCGen_emitArithInstruction(BCGen* self
             assert(0);//, "did not expect type " ~ enumToString(rhs.type.type) ~ "to be used in a float expression");
         if (inst != LongInst_Set)
         {
-            inst += (LongInst_FAdd32 - LongInst_Add);
+            int t = (int)inst;
+            t += ((int)LongInst_FAdd32 - (int)LongInst_Add);
+            inst = (LongInst)t;
         }
     }
     else if (lhs.type.type == BCTypeEnum_f52)
@@ -2774,7 +2772,9 @@ static inline void BCGen_emitArithInstruction(BCGen* self
         rhs = BCGen_pushOntoStack(self, rhs);
         if (inst != LongInst_Set)
         {
-            inst += (LongInst_FAdd64 - LongInst_Add);
+            int t = (int)inst;
+            t += ((int)LongInst_FAdd64 - (int)LongInst_Add);
+            inst = (LongInst)t; 
         }
     }
     else if (rhs.vType == BCValueType_Immediate)
@@ -2785,7 +2785,9 @@ static inline void BCGen_emitArithInstruction(BCGen* self
             //Change the instruction into the corresponding Imm Instruction;
             if (inst != LongInst_Set)
             {
-                inst += (LongInst_ImmAdd - LongInst_Add);
+                int t = (int) inst;
+                t += ((int)LongInst_ImmAdd - (int)LongInst_Add);
+                inst = (LongInst)t;
             }
             else
             {
@@ -2987,110 +2989,11 @@ static inline BCValue BCGen_run(BCGen* self, uint32_t fnIdx, BCValue* args, uint
 
     assert(self->finalized);
 
-    BCHeap newHeap = {0};
+    BCHeap newHeap = {};
     newHeap.heapMax = 1 << 14;
     newHeap.heapData = (uint8_t*)malloc(newHeap.heapMax);
 
     result = BCGen_interpret(self, fnIdx, args, n_args, &newHeap);
-
-    return result;
-}
-
-EXTERN_C BackendInterface BCGen_newInterface(void)
-{
-#if 0
-    BackendInterface result = {
-        .Initialize = (Initialize_t) BCGen_Initialize,
-        .InitializeV = (InitializeV_t) BCGen_InitializeV,
-        .Finalize = (Finalize_t) BCGen_Finalize,
-        .beginFunction = (beginFunction_t) BCGen_beginFunction,
-        .endFunction = (endFunction_t) BCGen_endFunction,
-        .genTemporary = (genTemporary_t) BCGen_genTemporary,
-        .destroyTemporary = (destroyTemporary_t) BCGen_destroyTemporary,
-        .genLocal = (genLocal_t) BCGen_genLocal,
-        .genParameter = (genParameter_t) BCGen_genParameter,
-        .emitFlg = (emitFlg_t) BCGen_emitFlg,
-        .Alloc = (Alloc_t) BCGen_Alloc,
-        .Assert = (Assert_t) BCGen_Assert,
-        .MemCpy = (MemCpy_t) BCGen_MemCpy,
-        .File = (File_t) BCGen_File,
-        .Line = (Line_t) BCGen_Line,
-        .Comment = (Comment_t) BCGen_Comment,
-        .Prt = (Prt_t) BCGen_Prt,
-        .Set = (Set_t) BCGen_Set,
-        .SetHigh = (SetHigh_t) BCGen_SetHigh,
-        .Ult3 = (Ult3_t) BCGen_Ult3,
-        .Ule3 = (Ule3_t) BCGen_Ule3,
-        .Lt3 = (Lt3_t) BCGen_Lt3,
-        .Le3 = (Le3_t) BCGen_Le3,
-        .Ugt3 = (Ugt3_t) BCGen_Ugt3,
-        .Uge3 = (Uge3_t) BCGen_Uge3,
-        .Gt3 = (Gt3_t) BCGen_Gt3,
-        .Ge3 = (Ge3_t) BCGen_Ge3,
-        .Eq3 = (Eq3_t) BCGen_Eq3,
-        .Neq3 = (Neq3_t) BCGen_Neq3,
-        .Add3 = (Add3_t) BCGen_Add3,
-        .Sub3 = (Sub3_t) BCGen_Sub3,
-        .Mul3 = (Mul3_t) BCGen_Mul3,
-        .Div3 = (Div3_t) BCGen_Div3,
-        .Udiv3 = (Udiv3_t) BCGen_Udiv3,
-        .And3 = (And3_t) BCGen_And3,
-        .Or3 = (Or3_t) BCGen_Or3,
-        .Xor3 = (Xor3_t) BCGen_Xor3,
-        .Lsh3 = (Lsh3_t) BCGen_Lsh3,
-        .Rsh3 = (Rsh3_t) BCGen_Rsh3,
-        .Mod3 = (Mod3_t) BCGen_Mod3,
-        .Umod3 = (Umod3_t) BCGen_Umod3,
-        .Not = (Not_t) BCGen_Not,
-        .Call = (Call_t) BCGen_Call,
-        .genLabel = (genLabel_t) BCGen_genLabel,
-        .Jmp = (Jmp_t) BCGen_Jmp,
-        .beginJmp = (beginJmp_t) BCGen_beginJmp,
-        .endJmp = (endJmp_t) BCGen_endJmp,
-        .beginCndJmp = (beginCndJmp_t) BCGen_beginCndJmp,
-        .endCndJmp = (endCndJmp_t) BCGen_endCndJmp,
-        .Load8 = (Load8_t) BCGen_Load8,
-        .Store8 = (Store8_t) BCGen_Store8,
-        .Load16 = (Load16_t) BCGen_Load16,
-        .Store16 = (Store16_t) BCGen_Store16,
-        .Load32 = (Load32_t) BCGen_Load32,
-        .Store32 = (Store32_t) BCGen_Store32,
-        .Load64 = (Load64_t) BCGen_Load64,
-        .Store64 = (Store64_t) BCGen_Store64,
-        .Throw = (Throw_t) BCGen_Throw,
-        .PushCatch = (PushCatch_t) BCGen_PushCatch,
-        .PopCatch = (PopCatch_t) BCGen_PopCatch,
-        .Ret = (Ret_t) BCGen_Ret,
-        .IToF32 = (IToF32_t) BCGen_IToF32,
-        .IToF64 = (IToF64_t) BCGen_IToF64,
-        .F32ToI = (F32ToI_t) BCGen_F32ToI,
-        .F64ToI = (F64ToI_t) BCGen_F64ToI,
-        .F32ToF64 = (F32ToF64_t) BCGen_F32ToF64,
-        .F64ToF32 = (F64ToF32_t) BCGen_F64ToF32,
-        .StrEq3 = (StrEq3_t) BCGen_StrEq3,
-        .Cat3 = (Cat3_t) BCGen_Cat3,
-        .run = (run_t) BCGen_run,
-        .destroy_instance = (destroy_instance_t) BCGen_destroy_instance,
-        .new_instance = (new_instance_t) BCGen_new_instance
-    };
-#else
-    BackendInterface result = {
-        .Initialize = cast(Initialize_t) BCGen_Initialize,
-        .Finalize = cast(Finalize_t) BCGen_Finalize,
-        .beginFunction = cast(beginFunction_t) BCGen_beginFunction,
-        .endFunction = cast(endFunction_t) BCGen_endFunction,
-        .genParameter = cast(genLocal_t) BCGen_genParameter,
-        .genLocal = cast(genLocal_t) BCGen_genLocal,
-
-        .Add3 = cast(Add3_t) BCGen_Add3,
-        .Ret = cast(Ret_t) BCGen_Ret,
-
-        .run = cast(run_t) BCGen_run,
-
-        .new_instance = (new_instance_t) BCGen_new_instance,
-        .destroy_instance = (destroy_instance_t) BCGen_destroy_instance
-    };
-#endif
 
     return result;
 }
@@ -4056,7 +3959,9 @@ static inline void BCGen_Cat3(BCGen* self, BCValue result, BCValue lhs, BCValue 
 {
 }
 
-
+#ifdef __cplusplus
+extern "C"
+#endif
 const BackendInterface BCGen_interface = {
     .Initialize = (Initialize_t) BCGen_Initialize,
     .InitializeV = (InitializeV_t) BCGen_InitializeV,

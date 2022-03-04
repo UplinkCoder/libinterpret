@@ -5,7 +5,7 @@ typedef void (*Initialize_t) (void* ctx, uint32_t n_args, ...);
 typedef void (*InitializeV_t) (void* ctx, uint32_t n_args, va_list args);
 typedef void (*Finalize_t) (void* ctx);
 
-typedef uint32_t (*beginFunction_t) (void* ctx, uint32_t fnId, void* fd);
+typedef uint32_t (*beginFunction_t) (void* ctx, uint32_t fnId, const void* fd);
 typedef void* (*endFunction_t) (void* ctx, uint32_t fnIdx);
 
 typedef BCValue (*genTemporary_t) (void* ctx, BCType bct);

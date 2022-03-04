@@ -198,7 +198,7 @@ const char* BCValueType_toChars(const BCValueType* vTypePtr)
 }
 
 #define STRUCT_NAME BCValue
-#ifdef __cplusplus
+#if 0
     operator BCValue::bool()
     {
         // the check for Undef is a workaround
@@ -241,7 +241,7 @@ const char* BCValueType_toChars(const BCValueType* vTypePtr)
 #undef STRUCT_NAME
 
 #define STRUCT_NAME BCValue
-#ifdef __cplusplus
+#if 0
     uint STRUCT_NAME::toUint()
     {
         switch (this.vType)
@@ -705,7 +705,7 @@ Lret:
 */
 
 #define STRUCT_NAME RegStatusList
-#ifdef __cplusplus
+#if 0
     STRUCT_NAME(int NREGS) pure
     {
         assert(NREGS < 32  /*"extending freeBitField is not yet done"*/);
