@@ -2853,7 +2853,7 @@ static inline BCValue BCGen_run(BCGen* self, uint32_t fnIdx, BCValue* args, uint
 
     BCHeap newHeap = {0};
     newHeap.heapMax = 1 << 14;
-    newHeap.heapData = malloc(newHeap.heapMax);
+    newHeap.heapData = (uint8_t*)malloc(newHeap.heapMax);
 
     result = BCGen_interpret(self, fnIdx, args, n_args, &newHeap);
 
@@ -2862,6 +2862,95 @@ static inline BCValue BCGen_run(BCGen* self, uint32_t fnIdx, BCValue* args, uint
 
 EXTERN_C BackendInterface BCGen_newInterface(void)
 {
+#if 0
+    BackendInterface result = {
+        .Initialize = (Initialize_t) BCGen_Initialize,
+        .InitializeV = (InitializeV_t) BCGen_InitializeV,
+
+        .Finalize = (Finalize_t) BCGen_Finalize,
+
+        .beginFunction = (beginFunction_t) BCGen_beginFunction,
+        .endFunction = (endFunction_t) BCGen_endFunction,
+
+        .genTemporary = (genTemporary_t) BCGen_genTemporary,
+        .destroyTemporary = (destroyTemporary_t) BCGen_destroyTemporary,
+
+        .genLocal = (genLocal_t) BCGen_genLocal,
+        .genParameter = (genParameter_t) BCGen_genParameter,
+        .emitFlg = (emitFlg_t) BCGen_emitFlg,
+
+        .Alloc = (Alloc_t) BCGen_Alloc,
+        .Assert = (Assert_t) BCGen_Assert,
+        .MemCpy = (MemCpy_t) BCGen_MemCpy,
+
+        .File = (File_t) BCGen_File,
+        .Line = (Line_t) BCGen_Line,
+        .Comment = (Comment_t) BCGen_Comment,
+        .Prt = (Prt_t) BCGen_Prt,
+
+        .Set = (Set_t) BCGen_Set,
+        .SetHigh = (SetHigh_t) BCGen_SetHigh,
+        .Ult3 = (Ult3_t) BCGen_Ult3,
+        .Ule3 = (Ule3_t) BCGen_Ule3,
+        .Lt3 = (Lt3_t) BCGen_Lt3,
+        .Le3 = (Le3_t) BCGen_Le3,
+        .Ugt3 = (Ugt3_t) BCGen_Ugt3,
+        .Uge3 = (Uge3_t) BCGen_Uge3,
+        .Gt3 = (Gt3_t) BCGen_Gt3,
+        .Ge3 = (Ge3_t) BCGen_Ge3,
+        .Eq3 = (Eq3_t) BCGen_Eq3,
+        .Neq3 = (Neq3_t) BCGen_Neq3,
+        .Add3 = (Add3_t) BCGen_Add3,
+        .Sub3 = (Sub3_t) BCGen_Sub3,
+        .Mul3 = (Mul3_t) BCGen_Mul3,
+        .Div3 = (Div3_t) BCGen_Div3,
+        .Udiv3 = (Udiv3_t) BCGen_Udiv3,
+        .And3 = (And3_t) BCGen_And3,
+        .Or3 = (Or3_t) BCGen_Or3,
+        .Xor3 = (Xor3_t) BCGen_Xor3,
+        .Lsh3 = (Lsh3_t) BCGen_Lsh3,
+        .Rsh3 = (Rsh3_t) BCGen_Rsh3,
+        .Mod3 = (Mod3_t) BCGen_Mod3,
+        .Umod3 = (Umod3_t) BCGen_Umod3,
+        .Not = (Not_t) BCGen_Not,
+
+        .Call = (Call_t) BCGen_Call,
+        .Jmp = (Jmp_t) BCGen_Jmp,
+        .beginJmp = (beginJmp_t) BCGen_beginJmp,
+        .endJmp = (endJmp_t) BCGen_endJmp,
+        .beginCndJmp = (beginCndJmp_t) BCGen_beginCndJmp,
+        .endCndJmp = (endCndJmp_t) BCGen_endCndJmp,
+
+        .Load8 = (Load8_t) BCGen_Load8,
+        .Store8 = (Store8_t) BCGen_Store8,
+        .Load16 = (Load16_t) BCGen_Load16,
+        .Store16 = (Store16_t) BCGen_Store16,
+        .Load32 = (Load32_t) BCGen_Load32,
+        .Store32 = (Store32_t) BCGen_Store32,
+        .Load64 = (Load64_t) BCGen_Load64,
+        .Store64 = (Store64_t) BCGen_Store64,
+        .castTo = (castTo_t) BCGen_castTo,
+
+        .Throw = (Throw_t) BCGen_Throw,
+        .PushCatch = (PushCatch_t) BCGen_PushCatch,
+        .PopCatch = (PopCatch_t) BCGen_PopCatch,
+        .Ret = (Ret_t) BCGen_Ret,
+
+        .IToF32 = (IToF32_t) BCGen_IToF32,
+        .IToF64 = (IToF64_t) BCGen_IToF64,
+        .F32ToI = (F32ToI_t) BCGen_F32ToI,
+        .F64ToI = (F64ToI_t) BCGen_F64ToI,
+        .F32ToF64 = (F32ToF64_t) BCGen_F32ToF64,
+        .F64ToF32 = (F64ToF32_t) BCGen_F64ToF32,
+
+        .StrEq3 = (StrEq3_t) BCGen_StrEq3,
+        .Cat3 = (Cat3_t) BCGen_Cat3,
+
+        .run = (run_t) BCGen_run,
+        .destroy_instance = (destroy_instance_t) BCGen_destroy_instance,
+        .new_instance = (new_instance_t) BCGen_new_instance
+    };
+#else
     BackendInterface result = {
         .Initialize = cast(Initialize_t) BCGen_Initialize,
         .Finalize = cast(Finalize_t) BCGen_Finalize,
@@ -2878,10 +2967,12 @@ EXTERN_C BackendInterface BCGen_newInterface(void)
         .new_instance = (new_instance_t) BCGen_new_instance,
         .destroy_instance = (destroy_instance_t) BCGen_destroy_instance
     };
+#endif
+
     return result;
 }
 
-void endJmp(BCGen* self, BCAddr atIp, BCLabel target)
+void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
 {
     uint16_t offset = BCGen_isShortJump(target.addr.addr - atIp.addr);
     if (offset)

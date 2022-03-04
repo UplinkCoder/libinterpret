@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <stdint.h>
 
 #include "int_iter.h"
 
@@ -58,7 +59,7 @@ void IntIter_FromBuffer(IntIter* self, void* buffer, uint32_t sz)
 
     self->remaining_chars = sz;
     DEBUG(self->lastRead = sz;)
-    self->currentReadPosition = buffer;
+    self->currentReadPosition = (char*)buffer;
 }
 
 _Bool IntIter_RefillWhenEmpty(IntIter *self, int chars_in_buffer)
