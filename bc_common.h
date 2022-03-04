@@ -240,12 +240,12 @@ EXTERN_C bool BCValue_eq(const BCValue* lhs, const BCValue* rhs);
 
 #undef STRUCT_NAME
 
-struct CndJmpBegin
+typedef struct CndJmpBegin
 {
     BCAddr at;
     BCValue cond;
     bool ifTrue;
-};
+} CndJmpBegin;
 
 #define stackAddrMask  ((1 << 31) | \
                         (1 << 30) | \

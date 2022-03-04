@@ -1,11 +1,6 @@
 #include <stdarg.h>
 #include "bc_common.h"
 
-typedef struct BackendInterface BackendInterface;
-
-typedef void* CndJmpBegin;
-typedef void* SourceLocation;
-
 typedef uint32_t (*beginFunction_t) (void* ctx, uint32_t fnId, void* fd);
 typedef BCValue (*genTemporary_t) (void* ctx, BCType bct);
 typedef void (*destroyTemporary_t) (void* ctx, BCValue tmp);
@@ -22,11 +17,11 @@ typedef CndJmpBegin (*beginCndJmp_t) (void* ctx, BCValue cond, bool ifTrue);
 typedef void (*endCndJmp_t) (void* ctx, CndJmpBegin jmp, BCLabel target);
 typedef void (*Jmp_t) (void* ctx, BCLabel target);
 typedef void (*emitFlg_t) (void* ctx, BCValue lhs);
-typedef void (*Alloc_t) (void* ctx, BCValue heapPtr, BCValue size, SourceLocation loc);
-typedef void (*Assert_t) (void* ctx, BCValue value, BCValue err, SourceLocation loc);
+typedef void (*Alloc_t) (void* ctx, BCValue heapPtr, BCValue size);
+typedef void (*Assert_t) (void* ctx, BCValue value, BCValue err);
 typedef void (*MemCpy_t) (void* ctx, BCValue dst, BCValue src, BCValue size);
 typedef void (*File_t) (void* ctx, const char* filename);
-typedef void (*Line_t) (void* ctx, uint line);
+typedef void (*Line_t) (void* ctx, uint32_t line);
 typedef void (*Comment_t) (void* ctx, const char* comment);
 typedef void (*Prt_t) (void* ctx, BCValue value, bool isString);
 typedef void (*Set_t) (void* ctx, BCValue lhs, BCValue rhs);
