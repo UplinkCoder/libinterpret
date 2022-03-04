@@ -2929,7 +2929,6 @@ EXTERN_C BackendInterface BCGen_newInterface(void)
         .Store32 = (Store32_t) BCGen_Store32,
         .Load64 = (Load64_t) BCGen_Load64,
         .Store64 = (Store64_t) BCGen_Store64,
-        .castTo = (castTo_t) BCGen_castTo,
 
         .Throw = (Throw_t) BCGen_Throw,
         .PushCatch = (PushCatch_t) BCGen_PushCatch,

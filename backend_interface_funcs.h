@@ -63,7 +63,6 @@ typedef void (*Load32_t) (void* ctx, BCValue dest, BCValue from);
 typedef void (*Store32_t) (void* ctx, BCValue dest, BCValue value);
 typedef void (*Load64_t) (void* ctx, BCValue dest, BCValue from);
 typedef void (*Store64_t) (void* ctx, BCValue dest, BCValue value);
-typedef BCValue (*castTo_t) (void* ctx, BCValue rhs, BCTypeEnum targetType);
 
 typedef void (*Throw_t) (void* ctx, BCValue e);
 typedef void (*PushCatch_t) (void* ctx);
@@ -148,7 +147,6 @@ typedef struct BackendInterface
     const Store32_t Store32;
     const Load64_t Load64;
     const Store64_t Store64;
-    const castTo_t castTo;
 
     const Throw_t Throw;
     const PushCatch_t PushCatch;
