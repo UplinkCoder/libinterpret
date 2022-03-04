@@ -36,10 +36,10 @@ static uint toStackOffset(uint unrealPointer)
     return (unrealPointer & ~stackAddrMask);
 }
 
-enum maxHeapAddress =  0b1111_1101_1111_1111_1111_1111_1111_1111;
+enum maxHeapAddress =  0b1111_1011_1111_1111_1111_1111_1111_1111;
 enum minHeapAddress =  0b0000_0000_0000_0000_0000_0000_0000_0000;
 
-enum minStackAddress = 0b1111_1110_0000_0000_0000_0000_0000_0000;
+enum minStackAddress = 0b1111_1100_0000_0000_0000_0000_0000_0000;
 enum maxStackAddress = 0b1111_1111_1111_1111_1111_1111_1111_1111;
 
 pragma(msg, maxStackAddress - minHeapAddress);

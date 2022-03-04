@@ -2501,7 +2501,7 @@ void BCGen_destroyTemporary(BCGen* self, BCValue tmp)
     }
 }
 
-static inline void BCGen_Initialize(BCGen* self)
+static inline void BCGen_Initialize(BCGen* self, uint32_t n_args, ...)
 {
     self->callCount = 0;
     self->parameterCount = 0;
@@ -2823,6 +2823,149 @@ static inline void BCGen_Add3(BCGen* self, BCValue result, BCValue lhs, BCValue 
     BCGen_emitArithInstruction(self, LongInst_Add, result, rhs, &result.type.type);
 }
 
+static inline void BCGen_Sub3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType != BCValueType_Immediate); //, "Cannot add to Immediate");
+
+    result = (result.vType != BCValueType_Unknown ? result : lhs);
+    if (!BCValue_eq(&lhs, &result))
+    {
+        BCGen_Set(self, result, lhs);
+    }
+
+    BCGen_emitArithInstruction(self, LongInst_Sub, result, rhs, &result.type.type);
+}
+
+static inline void BCGen_Mul3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType != BCValueType_Immediate); //, "Cannot add to Immediate");
+
+    result = (result.vType != BCValueType_Unknown ? result : lhs);
+    if (!BCValue_eq(&lhs, &result))
+    {
+        BCGen_Set(self, result, lhs);
+    }
+
+    BCGen_emitArithInstruction(self, LongInst_Mul, result, rhs, &result.type.type);
+}
+
+static inline void BCGen_Or3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType != BCValueType_Immediate); //, "Cannot add to Immediate");
+
+    result = (result.vType != BCValueType_Unknown ? result : lhs);
+    if (!BCValue_eq(&lhs, &result))
+    {
+        BCGen_Set(self, result, lhs);
+    }
+
+    BCGen_emitArithInstruction(self, LongInst_Or, result, rhs, &result.type.type);
+}
+
+static inline void BCGen_Rsh3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType != BCValueType_Immediate); //, "Cannot add to Immediate");
+
+    result = (result.vType != BCValueType_Unknown ? result : lhs);
+    if (!BCValue_eq(&lhs, &result))
+    {
+        BCGen_Set(self, result, lhs);
+    }
+
+    BCGen_emitArithInstruction(self, LongInst_Rsh, result, rhs, &result.type.type);
+}
+
+static inline void BCGen_Lsh3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType != BCValueType_Immediate); //, "Cannot add to Immediate");
+
+    result = (result.vType != BCValueType_Unknown ? result : lhs);
+    if (!BCValue_eq(&lhs, &result))
+    {
+        BCGen_Set(self, result, lhs);
+    }
+
+    BCGen_emitArithInstruction(self, LongInst_Lsh, result, rhs, &result.type.type);
+}
+
+static inline void BCGen_Xor3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType != BCValueType_Immediate); //, "Cannot add to Immediate");
+
+    result = (result.vType != BCValueType_Unknown ? result : lhs);
+    if (!BCValue_eq(&lhs, &result))
+    {
+        BCGen_Set(self, result, lhs);
+    }
+
+    BCGen_emitArithInstruction(self, LongInst_Xor, result, rhs, &result.type.type);
+}
+
+static inline void BCGen_And3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType != BCValueType_Immediate); //, "Cannot add to Immediate");
+
+    result = (result.vType != BCValueType_Unknown ? result : lhs);
+    if (!BCValue_eq(&lhs, &result))
+    {
+        BCGen_Set(self, result, lhs);
+    }
+
+    BCGen_emitArithInstruction(self, LongInst_And, result, rhs, &result.type.type);
+}
+
+static inline void BCGen_Div3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType != BCValueType_Immediate); //, "Cannot add to Immediate");
+
+    result = (result.vType != BCValueType_Unknown ? result : lhs);
+    if (!BCValue_eq(&lhs, &result))
+    {
+        BCGen_Set(self, result, lhs);
+    }
+
+    BCGen_emitArithInstruction(self, LongInst_Div, result, rhs, &result.type.type);
+}
+
+static inline void BCGen_Udiv3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType != BCValueType_Immediate); //, "Cannot add to Immediate");
+
+    result = (result.vType != BCValueType_Unknown ? result : lhs);
+    if (!BCValue_eq(&lhs, &result))
+    {
+        BCGen_Set(self, result, lhs);
+    }
+
+    BCGen_emitArithInstruction(self, LongInst_Udiv, result, rhs, &result.type.type);
+}
+
+static inline void BCGen_Mod3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType != BCValueType_Immediate); //, "Cannot add to Immediate");
+
+    result = (result.vType != BCValueType_Unknown ? result : lhs);
+    if (!BCValue_eq(&lhs, &result))
+    {
+        BCGen_Set(self, result, lhs);
+    }
+
+    BCGen_emitArithInstruction(self, LongInst_Mod, result, rhs, &result.type.type);
+}
+
+static inline void BCGen_Umod3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType != BCValueType_Immediate); //, "Cannot add to Immediate");
+
+    result = (result.vType != BCValueType_Unknown ? result : lhs);
+    if (!BCValue_eq(&lhs, &result))
+    {
+        BCGen_Set(self, result, lhs);
+    }
+
+    BCGen_emitArithInstruction(self, LongInst_Umod, result, rhs, &result.type.type);
+}
+
 static inline void BCGen_Ret(BCGen*self, BCValue val)
 {
     LongInst inst = ((BCTypeEnum_basicTypeSize(val.type.type) == 8) ? LongInst_Ret64 : LongInst_Ret32);
@@ -2859,28 +3002,21 @@ EXTERN_C BackendInterface BCGen_newInterface(void)
     BackendInterface result = {
         .Initialize = (Initialize_t) BCGen_Initialize,
         .InitializeV = (InitializeV_t) BCGen_InitializeV,
-
         .Finalize = (Finalize_t) BCGen_Finalize,
-
         .beginFunction = (beginFunction_t) BCGen_beginFunction,
         .endFunction = (endFunction_t) BCGen_endFunction,
-
         .genTemporary = (genTemporary_t) BCGen_genTemporary,
         .destroyTemporary = (destroyTemporary_t) BCGen_destroyTemporary,
-
         .genLocal = (genLocal_t) BCGen_genLocal,
         .genParameter = (genParameter_t) BCGen_genParameter,
         .emitFlg = (emitFlg_t) BCGen_emitFlg,
-
         .Alloc = (Alloc_t) BCGen_Alloc,
         .Assert = (Assert_t) BCGen_Assert,
         .MemCpy = (MemCpy_t) BCGen_MemCpy,
-
         .File = (File_t) BCGen_File,
         .Line = (Line_t) BCGen_Line,
         .Comment = (Comment_t) BCGen_Comment,
         .Prt = (Prt_t) BCGen_Prt,
-
         .Set = (Set_t) BCGen_Set,
         .SetHigh = (SetHigh_t) BCGen_SetHigh,
         .Ult3 = (Ult3_t) BCGen_Ult3,
@@ -2906,14 +3042,13 @@ EXTERN_C BackendInterface BCGen_newInterface(void)
         .Mod3 = (Mod3_t) BCGen_Mod3,
         .Umod3 = (Umod3_t) BCGen_Umod3,
         .Not = (Not_t) BCGen_Not,
-
         .Call = (Call_t) BCGen_Call,
+        .genLabel = (genLabel_t) BCGen_genLabel,
         .Jmp = (Jmp_t) BCGen_Jmp,
         .beginJmp = (beginJmp_t) BCGen_beginJmp,
         .endJmp = (endJmp_t) BCGen_endJmp,
         .beginCndJmp = (beginCndJmp_t) BCGen_beginCndJmp,
         .endCndJmp = (endCndJmp_t) BCGen_endCndJmp,
-
         .Load8 = (Load8_t) BCGen_Load8,
         .Store8 = (Store8_t) BCGen_Store8,
         .Load16 = (Load16_t) BCGen_Load16,
@@ -2922,22 +3057,18 @@ EXTERN_C BackendInterface BCGen_newInterface(void)
         .Store32 = (Store32_t) BCGen_Store32,
         .Load64 = (Load64_t) BCGen_Load64,
         .Store64 = (Store64_t) BCGen_Store64,
-
         .Throw = (Throw_t) BCGen_Throw,
         .PushCatch = (PushCatch_t) BCGen_PushCatch,
         .PopCatch = (PopCatch_t) BCGen_PopCatch,
         .Ret = (Ret_t) BCGen_Ret,
-
         .IToF32 = (IToF32_t) BCGen_IToF32,
         .IToF64 = (IToF64_t) BCGen_IToF64,
         .F32ToI = (F32ToI_t) BCGen_F32ToI,
         .F64ToI = (F64ToI_t) BCGen_F64ToI,
         .F32ToF64 = (F32ToF64_t) BCGen_F32ToF64,
         .F64ToF32 = (F64ToF32_t) BCGen_F64ToF32,
-
         .StrEq3 = (StrEq3_t) BCGen_StrEq3,
         .Cat3 = (Cat3_t) BCGen_Cat3,
-
         .run = (run_t) BCGen_run,
         .destroy_instance = (destroy_instance_t) BCGen_destroy_instance,
         .new_instance = (new_instance_t) BCGen_new_instance
@@ -3326,7 +3457,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         {
             Set(result, lhs);
         }
-
+        
         emitArithInstruction(LongInst_Sub, result, rhs, &result.type.type);
     }
 
@@ -3740,3 +3871,263 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
 
 }
 #endif
+
+static inline void BCGen_InitializeV(BCGen* self, uint32_t n_args, va_list args)
+{
+    // ignore any additonal args
+    // infact require n_args to be 0
+    assert(n_args == 0);
+    BCGen_Initialize(self, n_args);
+}
+
+static inline void BCGen_emitFlg(BCGen* self, BCValue lhs)
+{
+}
+
+static inline void BCGen_Alloc(BCGen* self, BCValue heapPtr, BCValue size)
+{
+}
+
+static inline void BCGen_Assert(BCGen* self, BCValue value, BCValue err)
+{
+}
+
+static inline void BCGen_MemCpy(BCGen* self, BCValue dst, BCValue src, BCValue size)
+{
+}
+
+static inline void BCGen_File(BCGen* self, const char* filename)
+{
+}
+
+static inline void BCGen_Line(BCGen* self, uint32_t line)
+{
+}
+
+static inline void BCGen_Comment(BCGen* self, const char* comment)
+{
+}
+
+static inline void BCGen_Prt(BCGen* self, BCValue value, bool isString)
+{
+}
+
+static inline void BCGen_SetHigh(BCGen* self, BCValue lhs, BCValue rhs)
+{
+}
+
+static inline void BCGen_Ult3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+}
+
+static inline void BCGen_Ule3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+}
+
+static inline void BCGen_Lt3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+}
+
+static inline void BCGen_Le3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+}
+
+static inline void BCGen_Ugt3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+}
+
+static inline void BCGen_Uge3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+}
+
+static inline void BCGen_Gt3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+}
+
+static inline void BCGen_Ge3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+}
+
+static inline void BCGen_Eq3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+}
+
+static inline void BCGen_Neq3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+}
+
+static inline void BCGen_Not(BCGen* self, BCValue result, BCValue val)
+{
+}
+
+static inline void BCGen_Call(BCGen* self, BCValue result, BCValue fn, BCValue* args, uint32_t n_args)
+{
+}
+
+static inline BCLabel BCGen_genLabel(BCGen* self)
+{
+}
+
+static inline void BCGen_Jmp(BCGen* self, BCLabel target)
+{
+}
+
+static inline CndJmpBegin BCGen_beginCndJmp(BCGen* self, BCValue cond, bool ifTrue)
+{
+}
+
+static inline void BCGen_endCndJmp(BCGen* self, CndJmpBegin jmp, BCLabel target)
+{
+}
+
+static inline void BCGen_Load8(BCGen* self, BCValue dest, BCValue from)
+{
+}
+
+static inline void BCGen_Store8(BCGen* self, BCValue dest, BCValue value)
+{
+}
+
+static inline void BCGen_Load16(BCGen* self, BCValue dest, BCValue from)
+{
+}
+
+static inline void BCGen_Store16(BCGen* self, BCValue dest, BCValue value)
+{
+}
+
+static inline void BCGen_Load32(BCGen* self, BCValue dest, BCValue from)
+{
+}
+
+static inline void BCGen_Store32(BCGen* self, BCValue dest, BCValue value)
+{
+}
+
+static inline void BCGen_Load64(BCGen* self, BCValue dest, BCValue from)
+{
+}
+
+static inline void BCGen_Store64(BCGen* self, BCValue dest, BCValue value)
+{
+}
+
+static inline void BCGen_Throw(BCGen* self, BCValue e)
+{
+}
+
+static inline void BCGen_PushCatch(BCGen* self)
+{
+}
+
+static inline void BCGen_PopCatch(BCGen* self)
+{
+}
+
+static inline void BCGen_IToF32(BCGen* self, BCValue result, BCValue rhs)
+{
+}
+
+static inline void BCGen_IToF64(BCGen* self, BCValue result, BCValue rhs)
+{
+}
+
+static inline void BCGen_F32ToI(BCGen* self, BCValue result, BCValue rhs)
+{
+}
+
+static inline void BCGen_F64ToI(BCGen* self, BCValue result, BCValue rhs)
+{
+}
+
+static inline void BCGen_F32ToF64(BCGen* self, BCValue result, BCValue rhs)
+{
+}
+
+static inline void BCGen_F64ToF32(BCGen* self, BCValue result, BCValue rhs)
+{
+}
+
+static inline void BCGen_StrEq3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+}
+
+static inline void BCGen_Cat3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs, const uint size)
+{
+}
+
+
+const BackendInterface BCGen_interface = {
+    .Initialize = (Initialize_t) BCGen_Initialize,
+    .InitializeV = (InitializeV_t) BCGen_InitializeV,
+    .Finalize = (Finalize_t) BCGen_Finalize,
+    .beginFunction = (beginFunction_t) BCGen_beginFunction,
+    .endFunction = (endFunction_t) BCGen_endFunction,
+    .genTemporary = (genTemporary_t) BCGen_genTemporary,
+    .destroyTemporary = (destroyTemporary_t) BCGen_destroyTemporary,
+    .genLocal = (genLocal_t) BCGen_genLocal,
+    .genParameter = (genParameter_t) BCGen_genParameter,
+    .emitFlg = (emitFlg_t) BCGen_emitFlg,
+    .Alloc = (Alloc_t) BCGen_Alloc,
+    .Assert = (Assert_t) BCGen_Assert,
+    .MemCpy = (MemCpy_t) BCGen_MemCpy,
+    .File = (File_t) BCGen_File,
+    .Line = (Line_t) BCGen_Line,
+    .Comment = (Comment_t) BCGen_Comment,
+    .Prt = (Prt_t) BCGen_Prt,
+    .Set = (Set_t) BCGen_Set,
+    .SetHigh = (SetHigh_t) BCGen_SetHigh,
+    .Ult3 = (Ult3_t) BCGen_Ult3,
+    .Ule3 = (Ule3_t) BCGen_Ule3,
+    .Lt3 = (Lt3_t) BCGen_Lt3,
+    .Le3 = (Le3_t) BCGen_Le3,
+    .Ugt3 = (Ugt3_t) BCGen_Ugt3,
+    .Uge3 = (Uge3_t) BCGen_Uge3,
+    .Gt3 = (Gt3_t) BCGen_Gt3,
+    .Ge3 = (Ge3_t) BCGen_Ge3,
+    .Eq3 = (Eq3_t) BCGen_Eq3,
+    .Neq3 = (Neq3_t) BCGen_Neq3,
+    .Add3 = (Add3_t) BCGen_Add3,
+    .Sub3 = (Sub3_t) BCGen_Sub3,
+    .Mul3 = (Mul3_t) BCGen_Mul3,
+    .Div3 = (Div3_t) BCGen_Div3,
+    .Udiv3 = (Udiv3_t) BCGen_Udiv3,
+    .And3 = (And3_t) BCGen_And3,
+    .Or3 = (Or3_t) BCGen_Or3,
+    .Xor3 = (Xor3_t) BCGen_Xor3,
+    .Lsh3 = (Lsh3_t) BCGen_Lsh3,
+    .Rsh3 = (Rsh3_t) BCGen_Rsh3,
+    .Mod3 = (Mod3_t) BCGen_Mod3,
+    .Umod3 = (Umod3_t) BCGen_Umod3,
+    .Not = (Not_t) BCGen_Not,
+    .Call = (Call_t) BCGen_Call,
+    .genLabel = (genLabel_t) BCGen_genLabel,
+    .Jmp = (Jmp_t) BCGen_Jmp,
+    .beginJmp = (beginJmp_t) BCGen_beginJmp,
+    .endJmp = (endJmp_t) BCGen_endJmp,
+    .beginCndJmp = (beginCndJmp_t) BCGen_beginCndJmp,
+    .endCndJmp = (endCndJmp_t) BCGen_endCndJmp,
+    .Load8 = (Load8_t) BCGen_Load8,
+    .Store8 = (Store8_t) BCGen_Store8,
+    .Load16 = (Load16_t) BCGen_Load16,
+    .Store16 = (Store16_t) BCGen_Store16,
+    .Load32 = (Load32_t) BCGen_Load32,
+    .Store32 = (Store32_t) BCGen_Store32,
+    .Load64 = (Load64_t) BCGen_Load64,
+    .Store64 = (Store64_t) BCGen_Store64,
+    .Throw = (Throw_t) BCGen_Throw,
+    .PushCatch = (PushCatch_t) BCGen_PushCatch,
+    .PopCatch = (PopCatch_t) BCGen_PopCatch,
+    .Ret = (Ret_t) BCGen_Ret,
+    .IToF32 = (IToF32_t) BCGen_IToF32,
+    .IToF64 = (IToF64_t) BCGen_IToF64,
+    .F32ToI = (F32ToI_t) BCGen_F32ToI,
+    .F64ToI = (F64ToI_t) BCGen_F64ToI,
+    .F32ToF64 = (F32ToF64_t) BCGen_F32ToF64,
+    .F64ToF32 = (F64ToF32_t) BCGen_F64ToF32,
+    .StrEq3 = (StrEq3_t) BCGen_StrEq3,
+    .Cat3 = (Cat3_t) BCGen_Cat3,
+    .run = (run_t) BCGen_run,
+    .destroy_instance = (destroy_instance_t) BCGen_destroy_instance,
+    .new_instance = (new_instance_t) BCGen_new_instance
+};
