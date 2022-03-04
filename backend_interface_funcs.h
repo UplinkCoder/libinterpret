@@ -12,7 +12,7 @@ typedef BCValue (*genTemporary_t) (void* ctx, BCType bct);
 typedef void (*destroyTemporary_t) (void* ctx, BCValue tmp);
 
 typedef BCValue (*genLocal_t) (void* ctx, BCType bct, const char* name);
-typedef BCValue (*genParameter_t) (void* ctx, BCType bct, const char*);
+typedef BCValue (*genParameter_t) (void* ctx, BCType bct, const char* name);
 typedef void (*emitFlg_t) (void* ctx, BCValue lhs);
 
 typedef void (*Alloc_t) (void* ctx, BCValue heapPtr, BCValue size);

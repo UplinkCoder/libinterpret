@@ -154,8 +154,18 @@ int main(int argc, char* argv[])
                 , parameter_lists[i] + sizeof("void* ctx")
             );
         }
+        else
+        {
+            printf("static inline %s %s_%s(%s** resultP%s\n{\n}\n\n"
+                , return_types[i]
+                , argv[1]
+                , function_names[i]
+                , argv[1]
+                , ")"
+            );
+        }
     }
-    printf("\nstatic const BackendInterface %s_interface = {\n", argv[1]);
+    printf("\nconst BackendInterface %s_interface = {\n", argv[1]);
     // .Initialize = (Initialize_t) BCGen_Initialize,
     for(int i = 0; i < n_parsed - 1; i++)
     {
@@ -166,7 +176,7 @@ int main(int argc, char* argv[])
             , function_names[i]
         );
     }
-    printf("    .%s = (%s_t) %s_%s\n}\n"
+    printf("    .%s = (%s_t) %s_%s\n};\n"
         , function_names[n_parsed -1]
         , function_names[n_parsed -1]
         , argv[1]
