@@ -2922,19 +2922,20 @@ static inline void BCGen_Le3(BCGen* self, BCValue result, BCValue lhs, BCValue r
     }
 }
 
-static inline void BCGen_Eq3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
-{
-    assert(result.vType == BCValueType_Unknown
-        || BCValue_isStackValueOrParameter(&result));
-
-    BCGen_emitArithInstruction(self, LongInst_Eq, lhs, rhs, 0);
-
-    if (result.vType != BCValueType_Unknown)
-    {
-        BCGen_emitFlg(self, result);
+#define BC_CMP_INST(OP) \
+    static inline void BCGen_##OP##3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs) \
+    { \
+        assert(result.vType == BCValueType_Unknown \
+            || BCValue_isStackValueOrParameter(&result)); \
+\
+        BCGen_emitArithInstruction(self, LongInst_##OP, lhs, rhs, 0); \
+\
+        if (result.vType != BCValueType_Unknown) \
+        { \
+            BCGen_emitFlg(self, result); \
+        } \
     }
-}
-
+BC_CMP_INST(Eq)
 static inline void BCGen_Neq3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
 {
     assert(result.vType == BCValueType_Unknown
@@ -3104,6 +3105,118 @@ static inline void BCGen_Umod3(BCGen* self, BCValue result, BCValue lhs, BCValue
     BCGen_emitArithInstruction(self, LongInst_Umod, result, rhs, &result.type.type);
 }
 
+void BCGen_Store8(BCGen* self, BCValue _to, BCValue value)
+{
+    if (!BCValue_isStackValueOrParameter(&value))
+    {
+        value = BCGen_pushOntoStack(self, value);
+    }
+
+    if (!BCValue_isStackValueOrParameter(&_to))
+    {
+        _to = BCGen_pushOntoStack(self, _to);
+    }
+    BCGen_emitLongInstSS(self, LongInst_HeapStore8, _to.stackAddr, value.stackAddr);
+}
+
+void BCGen_Store16(BCGen* self, BCValue _to, BCValue value)
+{
+    if (!BCValue_isStackValueOrParameter(&value))
+    {
+        value = BCGen_pushOntoStack(self, value);
+    }
+
+    if (!BCValue_isStackValueOrParameter(&_to))
+    {
+        _to = BCGen_pushOntoStack(self, _to);
+    }
+    BCGen_emitLongInstSS(self, LongInst_HeapStore16, _to.stackAddr, value.stackAddr);
+}
+
+void BCGen_Store32(BCGen* self, BCValue _to, BCValue value)
+{
+    if (!BCValue_isStackValueOrParameter(&value))
+    {
+        value = BCGen_pushOntoStack(self, value);
+    }
+
+    if (!BCValue_isStackValueOrParameter(&_to))
+    {
+        _to = BCGen_pushOntoStack(self, _to);
+    }
+    BCGen_emitLongInstSS(self, LongInst_HeapStore32, _to.stackAddr, value.stackAddr);
+}
+
+void BCGen_Store64(BCGen* self, BCValue _to, BCValue value)
+{
+    if (!BCValue_isStackValueOrParameter(&value))
+    {
+        value = BCGen_pushOntoStack(self, value);
+    }
+
+    if (!BCValue_isStackValueOrParameter(&_to))
+    {
+        _to = BCGen_pushOntoStack(self, _to);
+    }
+    BCGen_emitLongInstSS(self, LongInst_HeapStore64, _to.stackAddr, value.stackAddr);
+}
+
+void BCGen_Load8(BCGen* self, BCValue _to, BCValue from)
+{
+    if (!BCValue_isStackValueOrParameter(&from))
+    {
+        from = BCGen_pushOntoStack(self, from);
+    }
+
+    if (!BCValue_isStackValueOrParameter(&_to))
+    {
+        _to = BCGen_pushOntoStack(self, _to);
+    }
+    BCGen_emitLongInstSS(self, LongInst_HeapLoad8, _to.stackAddr, from.stackAddr);
+}
+
+void BCGen_Load16(BCGen* self, BCValue _to, BCValue from)
+{
+    if (!BCValue_isStackValueOrParameter(&from))
+    {
+        from = BCGen_pushOntoStack(self, from);
+    }
+
+    if (!BCValue_isStackValueOrParameter(&_to))
+    {
+        _to = BCGen_pushOntoStack(self, _to);
+    }
+    BCGen_emitLongInstSS(self, LongInst_HeapLoad16, _to.stackAddr, from.stackAddr);
+}
+
+void BCGen_Load32(BCGen* self, BCValue _to, BCValue from)
+{
+    if (!BCValue_isStackValueOrParameter(&from))
+    {
+        from = BCGen_pushOntoStack(self, from);
+    }
+
+    if (!BCValue_isStackValueOrParameter(&_to))
+    {
+        _to = BCGen_pushOntoStack(self, _to);
+    }
+    BCGen_emitLongInstSS(self, LongInst_HeapLoad32, _to.stackAddr, from.stackAddr);
+}
+
+void BCGen_Load64(BCGen* self, BCValue _to, BCValue from)
+{
+    if (!BCValue_isStackValueOrParameter(&from))
+    {
+        from = BCGen_pushOntoStack(self, from);
+    }
+
+    if (!BCValue_isStackValueOrParameter(&_to))
+    {
+        _to = BCGen_pushOntoStack(self, _to);
+    }
+    BCGen_emitLongInstSS(self, LongInst_HeapLoad64, _to.stackAddr, from.stackAddr);
+}
+
 static inline void BCGen_Ret(BCGen*self, BCValue val)
 {
     LongInst inst = ((BCTypeEnum_basicTypeSize(val.type.type) == 8) ? LongInst_Ret64 : LongInst_Ret32);
@@ -3165,7 +3278,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (cond.vType == BCValueType.Immediate)
         {
-            cond = pushOntoStack(cond);
+            cond = BCGen_pushOntoStack(cond);
         }
 
         auto result = CndJmpBegin(ip, cond, ifTrue);
@@ -3211,7 +3324,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         assert(size.type.type == BCTypeEnum_u32)//, "Size for alloc needs to be an u32" ~ " called by:" ~ itos(line));
         if (size.vType == BCValueType.Immediate)
         {
-            size = pushOntoStack(size);
+            size = BCGen_pushOntoStack(size);
         }
         assert(BCValue_isStackValueOrParameter(&size));
         assert(BCValue_isStackValueOrParameter(&heapPtr));
@@ -3240,9 +3353,9 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
 
     void MemCpy(BCValue dst, BCValue src, BCValue size)
     {
-        size = pushOntoStack(size);
-        src = pushOntoStack(src);
-        dst = pushOntoStack(dst);
+        size = BCGen_pushOntoStack(size);
+        src = BCGen_pushOntoStack(src);
+        dst = BCGen_pushOntoStack(dst);
 
         BCGen_emitLongInstSS(self, LongInst_MemCpy, size.stackAddr, dst.stackAddr, src.stackAddr);
     }
@@ -3318,7 +3431,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     void Prt(BCValue value, bool isString = false)
     {
         if (value.vType == BCValueType.Immediate)
-            value = pushOntoStack(value);
+            value = BCGen_pushOntoStack(self, value);
 
         byteCodeArray[ip] = ShortInst16Ex(LongInst_PrintValue, isString, value.stackAddr);
         byteCodeArray[ip + 1] = 0;
@@ -3333,7 +3446,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
             val = result;
         }
         if (val.vType == BCValueType.Immediate)
-            val = pushOntoStack(val);
+            val = BCGen_pushOntoStack(val);
 
         byteCodeArray[ip] = ShortInst16(LongInst_Not, val.stackAddr);
         byteCodeArray[ip + 1] = 0;
@@ -3355,7 +3468,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
 
     void Call(BCValue result, BCValue fn, BCValue[] args)
     {
-        auto call_id = pushOntoStack(imm32(callCount + 1)).stackAddr;
+        auto call_id = BCGen_pushOntoStack(imm32(callCount + 1)).stackAddr;
         calls[callCount++] = RetainedCall(fn, args, functionIdx, ip, sp);
         emitLongInst(LongInst_Call, result.stackAddr, call_id);
     }
@@ -3364,11 +3477,11 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (!BCValue_isStackValueOrParameter(&from))
         {
-            from = pushOntoStack(from);
+            from = BCGen_pushOntoStack(self, from);
         }
         if (!BCValue_isStackValueOrParameter(&_to))
         {
-            _to = pushOntoStack(_to);
+            _to = BCGen_pushOntoStack(self, _to);
         }
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
         assert(BCValue_isStackValueOrParameter(&from), "from has the vType " ~ enumToString(from.vType));
@@ -3380,12 +3493,12 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (!BCValue_isStackValueOrParameter(&value))
         {
-            value = pushOntoStack(value);
+            value = BCGen_pushOntoStack(self, value);
         }
 
         if (!BCValue_isStackValueOrParameter(&_to))
         {
-            _to = pushOntoStack(_to);
+            _to = BCGen_pushOntoStack(self, _to);
         }
 
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
@@ -3398,11 +3511,11 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (!BCValue_isStackValueOrParameter(&from))
         {
-            from = pushOntoStack(from);
+            from = BCGen_pushOntoStack(self, from);
         }
         if (!BCValue_isStackValueOrParameter(&_to))
         {
-            _to = pushOntoStack(_to);
+            _to = BCGen_pushOntoStack(self, _to);
         }
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
         assert(BCValue_isStackValueOrParameter(&from), "from has the vType " ~ enumToString(from.vType));
@@ -3414,12 +3527,12 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (!BCValue_isStackValueOrParameter(&value))
         {
-            value = pushOntoStack(value);
+            value = BCGen_pushOntoStack(self, value);
         }
         
         if (!BCValue_isStackValueOrParameter(&_to))
         {
-            _to = pushOntoStack(_to);
+            _to = BCGen_pushOntoStack(self, _to);
         }
         
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
@@ -3428,34 +3541,17 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         emitLongInst(LongInst_HeapStore16, _to.stackAddr, value.stackAddr);
     }
 
-    void Load32(BCValue _to, BCValue from)
-    {
-        if (!BCValue_isStackValueOrParameter(&from))
-        {
-            from = pushOntoStack(from);
-        }
-        
-        if (!BCValue_isStackValueOrParameter(&_to))
-        {
-            _to = pushOntoStack(_to);
-        }
-        
-        assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
-        assert(BCValue_isStackValueOrParameter(&from), "from has the vType " ~ enumToString(from.vType));
-        
-        emitLongInst(LongInst_HeapLoad32, _to.stackAddr, from.stackAddr);
-    }
 
     void Store32(BCValue _to, BCValue value)
     {
         if (!BCValue_isStackValueOrParameter(&value))
         {
-            value = pushOntoStack(value);
+            value = BCGen_pushOntoStack(self, value);
         }
 
         if (!BCValue_isStackValueOrParameter(&_to))
         {
-            _to = pushOntoStack(_to);
+            _to = BCGen_pushOntoStack(self, _to);
         }
 
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
@@ -3468,11 +3564,11 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (!BCValue_isStackValueOrParameter(&from))
         {
-            from = pushOntoStack(from);
+            from = BCGen_pushOntoStack(self, from);
         }
         if (!BCValue_isStackValueOrParameter(&_to))
         {
-            _to = pushOntoStack(_to);
+            _to = BCGen_pushOntoStack(self, _to);
         }
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
         assert(BCValue_isStackValueOrParameter(&from), "from has the vType " ~ enumToString(from.vType));
@@ -3484,12 +3580,12 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (!BCValue_isStackValueOrParameter(&value))
         {
-            value = pushOntoStack(value);
+            value = BCGen_pushOntoStack(self, value);
         }
         if (!BCValue_isStackValueOrParameter(&_to))
 
         {
-            _to = pushOntoStack(_to);
+            _to = BCGen_pushOntoStack(self, _to);
         }
 
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
@@ -3595,11 +3691,11 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
             "The result for this must be Empty or a StackValue not: " ~ enumToString(result.vType));
         if (lhs.vType == BCValueType.Immediate)
         {
-            lhs = pushOntoStack(lhs);
+            lhs = BCGen_pushOntoStack(lhs);
         }
         if (rhs.vType == BCValueType.Immediate)
         {
-            rhs = pushOntoStack(rhs);
+            rhs = BCGen_pushOntoStack(rhs);
         }
         assert(BCValue_isStackValueOrParameter(&lhs),
             "The lhs of StrEq3 is not a StackValue " ~ enumToString(rhs.vType));
@@ -3620,8 +3716,8 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
 
         assert(BCValue_isStackValueOrParameter(&result));
 
-        lhs = pushOntoStack(lhs);
-        rhs = pushOntoStack(rhs);
+        lhs = BCGen_pushOntoStack(lhs);
+        rhs = BCGen_pushOntoStack(rhs);
         emitLongInst(LongInst_Cat, result.stackAddr, lhs.stackAddr, rhs.stackAddr);
         // Hack! we have no overload to store additional information in the 8 bit
         // after the inst so just dump it in there let's hope we don't overwrite
@@ -3694,38 +3790,6 @@ static inline CndJmpBegin BCGen_beginCndJmp(BCGen* self, BCValue cond, bool ifTr
 }
 
 static inline void BCGen_endCndJmp(BCGen* self, CndJmpBegin jmp, BCLabel target)
-{
-}
-
-static inline void BCGen_Load8(BCGen* self, BCValue dest, BCValue from)
-{
-}
-
-static inline void BCGen_Store8(BCGen* self, BCValue dest, BCValue value)
-{
-}
-
-static inline void BCGen_Load16(BCGen* self, BCValue dest, BCValue from)
-{
-}
-
-static inline void BCGen_Store16(BCGen* self, BCValue dest, BCValue value)
-{
-}
-
-static inline void BCGen_Load32(BCGen* self, BCValue dest, BCValue from)
-{
-}
-
-static inline void BCGen_Store32(BCGen* self, BCValue dest, BCValue value)
-{
-}
-
-static inline void BCGen_Load64(BCGen* self, BCValue dest, BCValue from)
-{
-}
-
-static inline void BCGen_Store64(BCGen* self, BCValue dest, BCValue value)
 {
 }
 
