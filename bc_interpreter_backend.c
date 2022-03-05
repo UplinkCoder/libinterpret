@@ -80,7 +80,7 @@ typedef enum LongInst
     LongInst_Memcmp,
     LongInst_Assert,
 
-    // Immedate operand
+    // immediate operand
     LongInst_ImmAdd,
     LongInst_ImmSub,
     LongInst_ImmDiv,
@@ -3370,7 +3370,6 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         // after the inst so just dump it in there let's hope we don't overwrite
         // anything important
         byteCodeArray[ip-2] |= (size & 255) << 8;
-
     }
 
 }
