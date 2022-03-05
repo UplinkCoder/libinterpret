@@ -2812,6 +2812,142 @@ static inline void BCGen_emitArithInstruction(BCGen* self
     }
 }
 
+static inline void BCGen_emitFlg(BCGen* self, BCValue lhs)
+{
+    assert(BCValue_isStackValueOrParameter(&lhs));
+    BCGen_emit2(self, BCGen_ShortInst16(LongInst_Flg, lhs.stackAddr.addr), 0);
+}
+
+static inline void BCGen_Gt3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType == BCValueType_Unknown
+        || BCValue_isStackValueOrParameter(&result));
+
+    BCGen_emitArithInstruction(self, LongInst_Gt, lhs, rhs, 0);
+
+    if (result.vType != BCValueType_Unknown)
+    {
+        BCGen_emitFlg(self, result);
+    }
+}
+
+static inline void BCGen_Ugt3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType == BCValueType_Unknown
+        || BCValue_isStackValueOrParameter(&result));
+
+    BCGen_emitArithInstruction(self, LongInst_Ugt, lhs, rhs, 0);
+
+    if (result.vType != BCValueType_Unknown)
+    {
+        BCGen_emitFlg(self, result);
+    }
+}
+
+static inline void BCGen_Uge3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType == BCValueType_Unknown
+        || BCValue_isStackValueOrParameter(&result));
+
+    BCGen_emitArithInstruction(self, LongInst_Uge, lhs, rhs, 0);
+
+    if (result.vType != BCValueType_Unknown)
+    {
+        BCGen_emitFlg(self, result);
+    }
+}
+
+static inline void BCGen_Ult3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType == BCValueType_Unknown
+        || BCValue_isStackValueOrParameter(&result));
+
+    BCGen_emitArithInstruction(self, LongInst_Ult, lhs, rhs, 0);
+
+    if (result.vType != BCValueType_Unknown)
+    {
+        BCGen_emitFlg(self, result);
+    }
+}
+
+static inline void BCGen_Ule3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType == BCValueType_Unknown
+        || BCValue_isStackValueOrParameter(&result));
+
+    BCGen_emitArithInstruction(self, LongInst_Ule, lhs, rhs, 0);
+
+    if (result.vType != BCValueType_Unknown)
+    {
+        BCGen_emitFlg(self, result);
+    }
+}
+
+static inline void BCGen_Ge3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType == BCValueType_Unknown
+        || BCValue_isStackValueOrParameter(&result));
+
+    BCGen_emitArithInstruction(self, LongInst_Ge, lhs, rhs, 0);
+
+    if (result.vType != BCValueType_Unknown)
+    {
+        BCGen_emitFlg(self, result);
+    }
+}
+
+static inline void BCGen_Lt3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType == BCValueType_Unknown
+        || BCValue_isStackValueOrParameter(&result));
+
+    BCGen_emitArithInstruction(self, LongInst_Lt, lhs, rhs, 0);
+
+    if (result.vType != BCValueType_Unknown)
+    {
+        BCGen_emitFlg(self, result);
+    }
+}
+
+static inline void BCGen_Le3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType == BCValueType_Unknown
+        || BCValue_isStackValueOrParameter(&result));
+
+    BCGen_emitArithInstruction(self, LongInst_Le, lhs, rhs, 0);
+
+    if (result.vType != BCValueType_Unknown)
+    {
+        BCGen_emitFlg(self, result);
+    }
+}
+
+static inline void BCGen_Eq3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType == BCValueType_Unknown
+        || BCValue_isStackValueOrParameter(&result));
+
+    BCGen_emitArithInstruction(self, LongInst_Eq, lhs, rhs, 0);
+
+    if (result.vType != BCValueType_Unknown)
+    {
+        BCGen_emitFlg(self, result);
+    }
+}
+
+static inline void BCGen_Neq3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
+{
+    assert(result.vType == BCValueType_Unknown
+        || BCValue_isStackValueOrParameter(&result));
+
+     BCGen_emitArithInstruction(self, LongInst_Neq, lhs, rhs, 0);
+
+    if (result.vType != BCValueType_Unknown)
+    {
+        BCGen_emitFlg(self, result);
+    }
+}
+
 static inline void BCGen_Add3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
 {
     assert(result.vType != BCValueType_Immediate); //, "Cannot add to Immediate");
@@ -3070,14 +3206,6 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         }
     }
 
-    void emitFlg(BCValue lhs)
-    {
-        assert(BCValue_isStackValueOrParameter(&lhs))//, "Can only store flags in Stack Values");
-        byteCodeArray[ip] = ShortInst16(LongInst_Flg, lhs.stackAddr.addr);
-        byteCodeArray[ip + 1] = 0;
-        ip += 2;
-    }
-
     void Alloc(BCValue heapPtr, BCValue size, uint line = __LINE__)
     {
         assert(size.type.type == BCTypeEnum_u32)//, "Size for alloc needs to be an u32" ~ " called by:" ~ itos(line));
@@ -3223,276 +3351,6 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         // OR
         //    lhs.type.size == 8 && rhs.type.size == 4
 
-    }
-
-    void Ult3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType == BCValueType.Unknown
-            || BCValue_isStackValueOrParameter(&result),
-            "The result for this must be Empty or a StackValue");
-        emitArithInstruction(LongInst_Ult, lhs, rhs, null);
-
-        if (BCValue_isStackValueOrParameter(&result))
-        {
-            emitFlg(result);
-        }
-    }
-
-    void Ule3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType == BCValueType.Unknown
-            || BCValue_isStackValueOrParameter(&result),
-            "The result for this must be Empty or a StackValue");
-        emitArithInstruction(LongInst_Ule, lhs, rhs);
-
-        if (BCValue_isStackValueOrParameter(&result))
-        {
-            emitFlg(result);
-        }
-    }
-
-    void Lt3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType == BCValueType.Unknown
-            || BCValue_isStackValueOrParameter(&result),
-            "The result for this must be Empty or a StackValue");
-        emitArithInstruction(LongInst_Lt, lhs, rhs);
-
-        if (BCValue_isStackValueOrParameter(&result))
-        {
-            emitFlg(result);
-        }
-    }
-
-    void Le3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType == BCValueType.Unknown
-            || BCValue_isStackValueOrParameter(&result),
-            "The result for this must be Empty or a StackValue");
-        emitArithInstruction(LongInst_Le, lhs, rhs);
-
-        if (BCValue_isStackValueOrParameter(&result))
-        {
-            emitFlg(result);
-        }
-    }
-
-    void Ugt3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType == BCValueType.Unknown
-            || BCValue_isStackValueOrParameter(&result),
-            "The result for this must be Empty or a StackValue");
-        emitArithInstruction(LongInst_Ugt, lhs, rhs);
-        if (BCValue_isStackValueOrParameter(&result))
-        {
-            emitFlg(result);
-        }
-    }
-
-    void Uge3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType == BCValueType.Unknown
-            || BCValue_isStackValueOrParameter(&result),
-            "The result for this must be Empty or a StackValue");
-        emitArithInstruction(LongInst_Uge, lhs, rhs);
-        if (BCValue_isStackValueOrParameter(&result))
-        {
-            emitFlg(result);
-        }
-    }
-
-    void Gt3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType == BCValueType.Unknown
-            || BCValue_isStackValueOrParameter(&result),
-            "The result for this must be Empty or a StackValue");
-        emitArithInstruction(LongInst_Gt, lhs, rhs);
-        if (BCValue_isStackValueOrParameter(&result))
-        {
-            emitFlg(result);
-        }
-    }
-
-    void Ge3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType == BCValueType.Unknown
-            || BCValue_isStackValueOrParameter(&result),
-            "The result for this must be Empty or a StackValue");
-        emitArithInstruction(LongInst_Ge, lhs, rhs);
-        if (BCValue_isStackValueOrParameter(&result))
-        {
-            emitFlg(result);
-        }
-    }
-
-    void Eq3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType == BCValueType.Unknown
-            || BCValue_isStackValueOrParameter(&result),
-            "The result for this must be Empty or a StackValue not " ~ enumToString(result.vType) );
-        emitArithInstruction(LongInst_Eq, lhs, rhs);
-
-        if (BCValue_isStackValueOrParameter(&result))
-        {
-            emitFlg(result);
-        }
-    }
-
-    void Neq3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType == BCValueType.Unknown
-            || BCValue_isStackValueOrParameter(&result),
-            "The result for this must be Empty or a StackValue");
-        emitArithInstruction(LongInst_Neq, lhs, rhs);
-
-        if (BCValue_isStackValueOrParameter(&result))
-        {
-            emitFlg(result);
-        }
-    }
-
-    void Sub3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType != BCValueType.Immediate, "Cannot sub to Immediate");
-
-        result = (result ? result : lhs);
-        if (lhs != result)
-        {
-            Set(result, lhs);
-        }
-        
-        emitArithInstruction(LongInst_Sub, result, rhs, &result.type.type);
-    }
-
-    void Mul3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType != BCValueType.Immediate, "Cannot mul to Immediate");
-
-        result = (result ? result : lhs);
-        if (lhs != result)
-        {
-            Set(result, lhs);
-        }
-
-        // Prt(result); Prt(lhs); Prt(rhs);
-
-        emitArithInstruction(LongInst_Mul, result, rhs, &result.type.type);
-    }
-
-    void Div3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType != BCValueType.Immediate, "Cannot div to Immediate");
-
-        result = (result ? result : lhs);
-        if (lhs != result)
-        {
-            Set(result, lhs);
-        }
-        emitArithInstruction(LongInst_Div, result, rhs, &result.type.type);
-    }
-
-    void Udiv3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType != BCValueType.Immediate, "Cannot div to Immediate");
-
-        result = (result ? result : lhs);
-        if (lhs != result)
-        {
-            Set(result, lhs);
-        }
-        emitArithInstruction(LongInst_Udiv, result, rhs, &result.type.type);
-    }
-
-    void And3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType != BCValueType.Immediate, "Cannot and to Immediate");
-
-        result = (result ? result : lhs);
-        if (lhs != result)
-        {
-            Set(result, lhs);
-        }
-        if (lhs.type.type == BCTypeEnum_i32 && rhs.type.type == BCTypeEnum_i32)
-            emitArithInstruction(LongInst_And32, result, rhs);
-        else
-            emitArithInstruction(LongInst_And, result, rhs);
-
-    }
-
-    void Or3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType != BCValueType.Immediate, "Cannot or to Immediate");
-
-        result = (result ? result : lhs);
-        if (lhs != result)
-        {
-            Set(result, lhs);
-        }
-        emitArithInstruction(LongInst_Or, result, rhs);
-
-    }
-
-    void Xor3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType != BCValueType.Immediate, "Cannot xor to Immediate");
-
-        result = (result ? result : lhs);
-        if (lhs != result)
-        {
-            Set(result, lhs);
-        }
-        if (lhs.type.type == BCTypeEnum_i32 && rhs.type.type == BCTypeEnum_i32)
-            emitArithInstruction(LongInst_Xor32, result, rhs);
-        else
-            emitArithInstruction(LongInst_Xor, result, rhs);
-    }
-
-    void Lsh3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType != BCValueType.Immediate, "Cannot lsh to Immediate");
-
-        result = (result ? result : lhs);
-        if (lhs != result)
-        {
-            Set(result, lhs);
-        }
-        emitArithInstruction(LongInst_Lsh, result, rhs);
-    }
-
-    void Rsh3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType != BCValueType.Immediate, "Cannot rsh to Immediate");
-
-        result = (result ? result : lhs);
-        if (lhs != result)
-        {
-            Set(result, lhs);
-        }
-        emitArithInstruction(LongInst_Rsh, result, rhs);
-    }
-
-    void Mod3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType != BCValueType.Immediate, "Cannot mod to Immediate");
-
-        result = (result ? result : lhs);
-        if (lhs != result)
-        {
-            Set(result, lhs);
-        }
-        emitArithInstruction(LongInst_Mod, result, rhs, &result.type.type);
-    }
-
-    void Umod3(BCValue result, BCValue lhs, BCValue rhs)
-    {
-        assert(result.vType != BCValueType.Immediate, "Cannot mod to Immediate");
-
-        result = (result ? result : lhs);
-        if (lhs != result)
-        {
-            Set(result, lhs);
-        }
-        emitArithInstruction(LongInst_Umod, result, rhs, &result.type.type);
     }
 
     void Call(BCValue result, BCValue fn, BCValue[] args)
@@ -3732,7 +3590,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
 
     void StrEq3(BCValue result, BCValue lhs, BCValue rhs)
     {
-        assert(result.vType == BCValueType.Unknown
+        assert(result.vType == BCValueType_Unknown
             || BCValue_isStackValueOrParameter(&result),
             "The result for this must be Empty or a StackValue not: " ~ enumToString(result.vType));
         if (lhs.vType == BCValueType.Immediate)
@@ -3783,10 +3641,6 @@ static inline void BCGen_InitializeV(BCGen* self, uint32_t n_args, va_list args)
     BCGen_Initialize(self, n_args);
 }
 
-static inline void BCGen_emitFlg(BCGen* self, BCValue lhs)
-{
-}
-
 static inline void BCGen_Alloc(BCGen* self, BCValue heapPtr, BCValue size)
 {
 }
@@ -3816,46 +3670,6 @@ static inline void BCGen_Prt(BCGen* self, BCValue value, bool isString)
 }
 
 static inline void BCGen_SetHigh(BCGen* self, BCValue lhs, BCValue rhs)
-{
-}
-
-static inline void BCGen_Ult3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
-{
-}
-
-static inline void BCGen_Ule3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
-{
-}
-
-static inline void BCGen_Lt3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
-{
-}
-
-static inline void BCGen_Le3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
-{
-}
-
-static inline void BCGen_Ugt3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
-{
-}
-
-static inline void BCGen_Uge3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
-{
-}
-
-static inline void BCGen_Gt3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
-{
-}
-
-static inline void BCGen_Ge3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
-{
-}
-
-static inline void BCGen_Eq3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
-{
-}
-
-static inline void BCGen_Neq3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
 {
 }
 
