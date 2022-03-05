@@ -363,10 +363,10 @@ typedef struct BCInterpreter {
     
     uint32_t lastLine;
     
+    BCValue cRetval;
+
     int64_t stack[LOCAL_STACK_SIZE];
     ReturnAddr returnAddrs[MAX_CALL_DEPTH];
-
-    BCValue cRetval;
 } BCInterpreter;
 
 bool BCInterpreter_Return(BCInterpreter* self)
