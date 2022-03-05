@@ -77,7 +77,7 @@ typedef enum LongInst
     LongInst_Rsh,
     LongInst_Set,
 
-    LongInst_StrEq,
+    LongInst_Memcmp,
     LongInst_Assert,
 
     // Immedate operand
@@ -159,7 +159,7 @@ typedef enum LongInst
     LongInst_MemCpy,
 
     LongInst_BuiltinCall, // call a builtin.
-    LongInst_Cat,
+    LongInst_Realloc,
     LongInst_Comment,
     LongInst_Line,
     LongInst_File,
@@ -1035,9 +1035,9 @@ void PrintCode(IntIter* iter)
                 assert(0);//, "Unsupported right now: BCBuiltin");
             }
 #if 0
-        case LongInst_Cat:
+        case LongInst_Realloc:
             {
-                printf("LongInst_Cat\n");
+                printf("LongInst_Realloc\n");
                 if (*rhs == 0 && *lhsRef == 0)
                 {
                     *opRef = 0;
@@ -1135,7 +1135,7 @@ void PrintCode(IntIter* iter)
             }
             break;
 #if 0
-        case LongInst_StrEq:
+        case LongInst_Memcmp:
             {
                 printf("LongInst_Comment\n");
                 cond = false;
@@ -2116,7 +2116,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
                 assert(0);//, "Unsupported right now: BCBuiltin");
             }
 #if 0
-        case LongInst_Cat:
+        case LongInst_Realloc:
             {
                 if (*rhs == 0 && *lhsRef == 0)
                 {
@@ -2307,7 +2307,7 @@ L_LongInst_Comment:
             }
             break;
 #if 0
-        case LongInst_StrEq:
+        case LongInst_Memcmp:
             {
                 cond = false;
 
@@ -3456,7 +3456,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     }
 
 
-    void StrEq3(BCValue result, BCValue lhs, BCValue rhs)
+    void Memcmp(BCValue result, BCValue lhs, BCValue rhs)
     {
         assert(result.vType == BCValueType_Unknown
             || BCValue_isStackValueOrParameter(&result),
@@ -3470,11 +3470,11 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
             rhs = BCGen_pushOntoStack(rhs);
         }
         assert(BCValue_isStackValueOrParameter(&lhs),
-            "The lhs of StrEq3 is not a StackValue " ~ enumToString(rhs.vType));
+            "The lhs of Memcmp is not a StackValue " ~ enumToString(rhs.vType));
         assert(BCValue_isStackValueOrParameter(&rhs),
-            "The rhs of StrEq3 not a StackValue" ~ enumToString(rhs.vType));
+            "The rhs of Memcmp not a StackValue" ~ enumToString(rhs.vType));
 
-        emitLongInst(LongInst_StrEq, lhs.stackAddr, rhs.stackAddr);
+        emitLongInst(LongInst_Memcmp, lhs.stackAddr, rhs.stackAddr);
 
         if (BCValue_isStackValueOrParameter(&result))
         {
@@ -3482,7 +3482,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         }
     }
 
-    void Cat3(BCValue result, BCValue lhs, BCValue rhs, const uint size)
+    void Realloc(BCValue result, BCValue lhs, BCValue rhs, const uint size)
     {
         assert(size <= 255);
 
@@ -3490,7 +3490,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
 
         lhs = BCGen_pushOntoStack(lhs);
         rhs = BCGen_pushOntoStack(rhs);
-        emitLongInst(LongInst_Cat, result.stackAddr, lhs.stackAddr, rhs.stackAddr);
+        emitLongInst(LongInst_Realloc, result.stackAddr, lhs.stackAddr, rhs.stackAddr);
         // Hack! we have no overload to store additional information in the 8 bit
         // after the inst so just dump it in there let's hope we don't overwrite
         // anything important
@@ -3597,11 +3597,11 @@ static inline void BCGen_F64ToF32(BCGen* self, BCValue *result, const BCValue* r
 {
 }
 
-static inline void BCGen_StrEq3(BCGen* self, BCValue *result, const BCValue* lhs, const BCValue* rhs)
+static inline void BCGen_Memcmp(BCGen* self, BCValue *result, const BCValue* lhs, const BCValue* rhs)
 {
 }
 
-static inline void BCGen_Cat3(BCGen* self, BCValue *result, const BCValue* lhs, const BCValue* rhs, const uint size)
+static inline void BCGen_Realloc(BCGen* self, BCValue *result, const BCValue* lhs, const BCValue* rhs, const uint size)
 {
 }
 
@@ -3676,8 +3676,8 @@ const BackendInterface BCGen_interface = {
     .F64ToI = (F64ToI_t) BCGen_F64ToI,
     .F32ToF64 = (F32ToF64_t) BCGen_F32ToF64,
     .F64ToF32 = (F64ToF32_t) BCGen_F64ToF32,
-    .StrEq3 = (StrEq3_t) BCGen_StrEq3,
-    .Cat3 = (Cat3_t) BCGen_Cat3,
+    .Memcmp = (Memcmp_t) BCGen_Memcmp,
+    .Realloc = (Realloc_t) BCGen_Realloc,
     .run = (run_t) BCGen_run,
     .destroy_instance = (destroy_instance_t) BCGen_destroy_instance,
     .new_instance = (new_instance_t) BCGen_new_instance

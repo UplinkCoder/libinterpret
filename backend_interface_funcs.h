@@ -1,4 +1,5 @@
 #include <stdarg.h>
+#include <stdint.h>
 #include "bc_common.h"
 
 typedef void (*Initialize_t) (void* ctx, uint32_t n_args, ...);
@@ -79,8 +80,8 @@ typedef void (*F64ToI_t) (void* ctx, BCValue *result, const BCValue* rhs);
 typedef void (*F32ToF64_t) (void* ctx, BCValue *result, const BCValue* rhs);
 typedef void (*F64ToF32_t) (void* ctx, BCValue *result, const BCValue* rhs);
 
-typedef void (*StrEq3_t) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs);
-typedef void (*Cat3_t) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs, const uint size);
+typedef void (*Memcmp_t) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs);
+typedef void (*Realloc_t) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs, const uint32_t size);
 
 typedef BCValue (*run_t) (void* ctx, uint32_t fnIdx, const BCValue* args, uint32_t n_args);
 typedef void (*destroy_instance_t) (void* ctx);
@@ -166,8 +167,8 @@ typedef struct BackendInterface
     const F32ToF64_t F32ToF64;
     const F64ToF32_t F64ToF32;
 
-    const StrEq3_t StrEq3;
-    const Cat3_t Cat3;
+    const Memcmp_t Memcmp;
+    const Realloc_t Realloc;
 
     const run_t run;
     const destroy_instance_t destroy_instance;
