@@ -661,17 +661,21 @@ EXTERN_C bool BCType_isBasicBCType(BCType bct)
             || bct.type == BCTypeEnum_AArray);
 }
 
-EXTERN_C BCValue  i32(BCValue v)
+#if 0
+EXTERN_C BCValue  i32(const BCValue* v)
 {
-    v.type.type = BCTypeEnum_i32;
-    return v;
+    BCValue result = *v;
+    result.type.type = BCTypeEnum_i32;
+    return result;
 }
 
-EXTERN_C BCValue u32(BCValue v)
+EXTERN_C BCValue u32(const BCValue* v)
 {
-    v.type.type = BCTypeEnum_u32;
-    return v;
+    BCValue result = *v;
+    result.type.type = BCTypeEnum_u32;
+    return result;
 }
+#endif
 
 EXTERN_C bool BCValue_isStackValueOrParameter(const BCValue* val)
 {

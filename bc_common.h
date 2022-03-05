@@ -543,9 +543,6 @@ EXTERN_C BCValue imm32_(uint32_t value, bool signed_);
 
 EXTERN_C BCValue imm64_(uint64_t value, bool signed_);
 
-EXTERN_C BCValue i32(BCValue val);
-EXTERN_C BCValue u32(BCValue val);
-
 typedef struct Imm23f
 {
     float imm23f;
@@ -696,5 +693,6 @@ static const BCTypeEnum smallIntegerTypes[] = {BCTypeEnum_u16, BCTypeEnum_u8,
 EXTERN_C BCTypeEnum BCTypeEnum_commonTypeEnum(BCTypeEnum lhs, BCTypeEnum rhs);
 #undef offsetof
 
-static const BCType BCType_i32 = {BCTypeEnum_i32}; 
+static const BCType BCType_i32 = {BCTypeEnum_i32};
+static const BCType BCType_u32 = {BCTypeEnum_u32};
 #endif
