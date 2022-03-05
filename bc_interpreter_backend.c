@@ -2788,6 +2788,7 @@ static inline void BCGen_emitArithInstruction(BCGen* self
     if (lhs_vType == BCValueType_Immediate)
     {
         lhs = BCGen_pushOntoStack(self, lhsP);
+        lhsP = &lhs;
     }
 
     if (resultTypeEnum)
@@ -2801,17 +2802,23 @@ static inline void BCGen_emitArithInstruction(BCGen* self
             {
                 float frhs = (float) rhsP->imm32.imm32;
                 rhs = imm32(*(int32_t*)&frhs);
+                rhsP = &rhs;
             }
             else
+            {
                 rhs = BCGen_castTo(self, rhsP, BCTypeEnum_f23);
+                rhsP = &rhs;
+            }
         }
         else if (rhs_type_type == BCTypeEnum_f23)
         {
             rhs = BCGen_pushOntoStack(self, rhsP);
+            rhsP = &rhs;
         }
         else if (rhs_type_type == BCTypeEnum_f52)
         {
             rhs = BCGen_castTo(self, rhsP, lhs_type_type);
+            rhsP = &rhs;
         }
         else
             assert(0);//, "did not expect type " ~ enumToString(rhs.type.type) ~ "to be used in a float expression");
@@ -2830,6 +2837,7 @@ static inline void BCGen_emitArithInstruction(BCGen* self
             // assert (rhs.type.type == BCTypeEnum_f52)
             // here before .... check if this is an invariant
             rhs = BCGen_castTo(self, rhsP, BCTypeEnum_f52);
+            rhsP = &rhs;
         }
 
         rhs = BCGen_pushOntoStack(self, &rhs);
@@ -2856,18 +2864,19 @@ static inline void BCGen_emitArithInstruction(BCGen* self
             {
                 inst = LongInst_SetImm32;
             }
-            BCGen_emitLongInstSI(self, inst, lhs.stackAddr, rhs.imm32.imm32);
+            BCGen_emitLongInstSI(self, inst, lhsP->stackAddr, rhsP->imm32.imm32);
             return ;
         }
         else
         {
             rhs = BCGen_pushOntoStack(self, rhsP);
+            rhsP = &rhs;
         }
     }
 
-    if (BCValue_isStackValueOrParameter(&rhs))
+    if (BCValue_isStackValueOrParameter(rhsP))
     {
-        BCGen_emitLongInstSS(self, inst, lhs.stackAddr, rhs.stackAddr);
+        BCGen_emitLongInstSS(self, inst, lhsP->stackAddr, rhsP->stackAddr);
     }
     else
     {
