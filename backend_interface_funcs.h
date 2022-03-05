@@ -51,6 +51,8 @@ typedef void (*Mod3_t) (void* ctx, BCValue *result, const BCValue* lhs, const BC
 typedef void (*Umod3_t) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs);
 typedef void (*Not_t) (void* ctx, BCValue *result, const BCValue* val);
 
+typedef void (*LoadFramePointer_t) (void* ctx, BCValue *result, const int32_t offset);
+
 typedef void (*Call_t) (void* ctx, BCValue *result, const BCValue* fn, const BCValue* args, uint32_t n_args);
 typedef BCLabel (*genLabel_t) (void* ctx);
 typedef void (*Jmp_t) (void* ctx, BCLabel target);
@@ -137,6 +139,8 @@ typedef struct BackendInterface
     const Mod3_t Mod3;
     const Umod3_t Umod3;
     const Not_t Not;
+
+    const LoadFramePointer_t LoadFramePointer;
 
     const Call_t Call;
     const genLabel_t genLabel;

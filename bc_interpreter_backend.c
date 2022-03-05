@@ -2,10 +2,18 @@
  * Written By Stefan Koch in 2016 - 2022
 */
 
+#include <assert.h>
+#include <math.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "bc_common.h"
 #include "backend_interface_funcs.h"
-#include <math.h>
-#include "int_iter.c"
+
+#ifdef DIS
+# include "int_iter.c"
+#endif
 
 #define cast(T) (T)
 
@@ -146,20 +154,28 @@ typedef enum LongInst
     LongInst_SetImm32,
     LongInst_SetImm8,
 
+    LongInst_LoadFramePointer,
     LongInst_Call,
+
+#define HEAP_LOAD_BEGIN LongInst_HeapLoad8
     LongInst_HeapLoad8,
-    LongInst_HeapStore8,
     LongInst_HeapLoad16,
-    LongInst_HeapStore16,
-    LongInst_HeapLoad32, ///SP[hi & 0xFFFF] = Heap[align4(SP[hi >> 16])]
-    LongInst_HeapStore32, ///Heap[align4(SP[hi & 0xFFFF)] = SP[hi >> 16]]
+    LongInst_HeapLoad32,
     LongInst_HeapLoad64,
+#define HEAP_LOAD_END LongInst_HeapLoad64
+
+#define HEAP_STORE_BEGIN LongInst_HeapStore8
+    LongInst_HeapStore8,
+    LongInst_HeapStore32, ///Heap[align4(SP[hi & 0xFFFF)] = SP[hi >> 16]]
+    LongInst_HeapStore16,
     LongInst_HeapStore64,
+#define HEAP_STORE_END LongInst_HeapStore64
+
     LongInst_Alloc, /// SP[hi & 0xFFFF] = heapSize; heapSize += SP[hi >> 16]
     LongInst_MemCpy,
+    LongInst_Realloc,
 
     LongInst_BuiltinCall, // call a builtin.
-    LongInst_Realloc,
     LongInst_Comment,
     LongInst_Line,
     LongInst_File,
@@ -185,7 +201,7 @@ typedef enum LongInst
 * [8-16] Unused
 * [16-32] Register (lhs)
 * [32-64] Imm32 (rhs)
-****************************
+* **************************
 * 3 OperandInstuctions // memcpy
 * [0-6] Instruction
 * [6-7] Unused
@@ -349,6 +365,8 @@ typedef struct ReturnAddr
 #define LOCAL_STACK_SIZE 2048
 
 typedef struct BCInterpreter {
+    long* fp;    
+    long* sp;
     uint32_t ip;
     
     uint32_t n_return_addrs;
@@ -411,6 +429,7 @@ bool BCInterpreter_Return(BCInterpreter* self)
     return true;
 }
 
+#ifdef DIS
 void PrintCode(IntIter* iter)
 {
     uint32_t ip = 0;
@@ -1201,7 +1220,7 @@ void PrintCode(IntIter* iter)
         }
     }
 }
-
+#endif
 
 BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_args, BCHeap* heapPtr)
 {
@@ -2001,7 +2020,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             case LongInst_HeapLoad16:
             {
                 assert(*rhs);//, "trying to deref null pointer inLine: " ~ itos(lastLine));
-                const long addr = *lhsRef;
+                const uint32_t addr = (uint32_t)*rhs;
                 (*lhsRef) =  heapPtr->heapData[addr]
                           | (heapPtr->heapData[addr + 1] << 8);
 
@@ -2010,7 +2029,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             case LongInst_HeapStore16:
             {
                 assert(*lhsRef);//, "trying to deref null pointer SP[" ~ itos(cast(int)((lhsRef - &stackP[0])*4)) ~ "] at : &" ~ itos (ip - 2));
-                const uint32_t addr = *lhsRef;
+                const uint32_t addr = (uint32_t)*lhsRef;
                 heapPtr->heapData[addr    ] = ((*rhs     ) & 0xFF);
                 heapPtr->heapData[addr + 1] = ((*rhs >> 8) & 0xFF);
             }
@@ -2048,8 +2067,8 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
                 const int64_t heapOffset = *lhsRef;
                 assert(heapOffset < heapPtr->heapSize);//, "Store out of range at ip: &" ~ itos(ip - 2) ~ " atLine: " ~ itos(lastLine));
                 const uint8_t* basePtr = (heapPtr->heapData + *lhsRef);
-                const long addr = *lhsRef;
-                const long value = *rhs;
+                const uint32_t addr = (uint32_t)*lhsRef;
+                const uint64_t value = *(uint64_t*)rhs;
 
                 storeu32(&heapPtr->heapData[addr],     value & UINT32_MAX);
                 storeu32(&heapPtr->heapData[addr + 4], cast(uint32_t)(value >> 32));
@@ -3492,6 +3511,12 @@ static inline void BCGen_Realloc(BCGen* self, BCValue *result, const BCValue* lh
 {
 }
 
+static inline void BCGen_LoadFramePointer(BCGen* self, BCValue *result, const int32_t offset)
+{
+    assert(BCValue_isStackValueOrParameter(result));
+    BCGen_emitLongInstSI(self, LongInst_LoadFramePointer, result->stackAddr, offset);
+}
+
 #ifdef __cplusplus
 extern "C"
 #endif
@@ -3538,6 +3563,7 @@ const BackendInterface BCGen_interface = {
     .Mod3 = (Mod3_t) BCGen_Mod3,
     .Umod3 = (Umod3_t) BCGen_Umod3,
     .Not = (Not_t) BCGen_Not,
+    .LoadFramePointer = (LoadFramePointer_t) BCGen_LoadFramePointer,
     .Call = (Call_t) BCGen_Call,
     .genLabel = (genLabel_t) BCGen_genLabel,
     .Jmp = (Jmp_t) BCGen_Jmp,

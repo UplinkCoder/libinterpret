@@ -804,21 +804,6 @@ Lret:
 #endif
 #undef STRUCT_NAME
 
-const uint8_t toParamCode(const BCValue val)
-{
-    if (val.type.type == BCTypeEnum_i32)
-        return 0x0;
-    /*else if (val.type.type)
-        return 0b0001;*/
-    else if (val.type.type == BCTypeEnum_Struct)
-        return 0x2;
-    else if (val.type.type == BCTypeEnum_Slice
-            || val.type.type == BCTypeEnum_Array || val.type.type == BCTypeEnum_string8)
-        return 0x3;
-    else
-        assert(!"ParameterType unsupported");
-}
-
 EXTERN_C BCValue imm32_(uint32_t value, bool signed_)
 {
     BCValue ret;

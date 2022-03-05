@@ -766,6 +766,7 @@ struct LightningGen
         auto stackSize = (typeIsPointerOnStack(bct.type) ? PtrSize :  basicTypeSize(bct.type));
         if (needsUserSize(bct.type))
         {
+            assert(userSize);
             stackSize = userSize;
         }
         currentFrameOffset += stackSize;
