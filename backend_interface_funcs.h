@@ -13,7 +13,7 @@ typedef void (*destroyTemporary_t) (void* ctx, BCValue tmp);
 
 typedef BCValue (*genLocal_t) (void* ctx, BCType bct, const char* name);
 typedef BCValue (*genParameter_t) (void* ctx, BCType bct, const char* name);
-typedef void (*emitFlg_t) (void* ctx, BCValue lhs);
+typedef void (*emitFlag_t) (void* ctx, BCValue* lhs);
 
 typedef void (*Alloc_t) (void* ctx, BCValue heapPtr, BCValue size);
 typedef void (*Assert_t) (void* ctx, BCValue value, BCValue err);
@@ -100,7 +100,7 @@ typedef struct BackendInterface
 
     const genLocal_t genLocal;
     const genParameter_t genParameter;
-    const emitFlg_t emitFlg;
+    const emitFlag_t emitFlag;
 
     const Alloc_t Alloc;
     const Assert_t Assert;

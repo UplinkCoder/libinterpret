@@ -192,7 +192,7 @@ typedef enum LongInst
 * -----------------
 * [16-32] Register (extra_data)
 * [32-48] Register (lhs)
-* [48-64] Register (rhs) 
+* [48-64] Register (rhs)
 
 */
 
@@ -1040,7 +1040,7 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_Cat\n");
                 if (*rhs == 0 && *lhsRef == 0)
                 {
-                    *lhsStackRef = 0;
+                    *opRef = 0;
                 }
                 else
                 {
@@ -1105,7 +1105,7 @@ void PrintCode(IntIter* iter)
                         heapPtr->heapData[result_lhs_end ..  result_lhs_end + scaled_rhs_length] =
                             heapPtr->heapData[rhsBase .. rhsBase + scaled_rhs_length];
 
-                        *lhsStackRef = resultPtr;
+                        *opRef = resultPtr;
                     }
                 }
             }
@@ -1282,9 +1282,8 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
         const uint32_t lhsOffset   = hi & 0xFFFF;
         const uint32_t rhsOffset   = (hi >> 16) & 0xFFFF;
 
-        int64_t* lhsRef = (&stackP[(lhsOffset / 4)]);
-        int64_t* rhs = (&stackP[(rhsOffset / 4)]);
-        int64_t* lhsStackRef = (&stackP[(opRefOffset / 4)]);
+        int64_t* lhsRef = &stackP[(lhsOffset / 4)];
+        int64_t* rhs = &stackP[(rhsOffset / 4)];
         int64_t* opRef = &stackP[(opRefOffset / 4)];
 
         float flhs;
@@ -1317,103 +1316,103 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
         {
         case LongInst_ImmAdd:
             {
-                (*lhsStackRef) += imm32c;
+                (*opRef) += imm32c;
             }
             break;
 
         case LongInst_ImmSub:
             {
-                (*lhsStackRef) -= imm32c;
+                (*opRef) -= imm32c;
             }
             break;
 
         case LongInst_ImmMul:
             {
-                (*lhsStackRef) *= imm32c;
+                (*opRef) *= imm32c;
             }
             break;
 
         case LongInst_ImmDiv:
             {
                 printf("LongInst_ImmDiv\n");
-                (*lhsStackRef) /= imm32c;
+                (*opRef) /= imm32c;
             }
             break;
 
         case LongInst_ImmUdiv:
             {
-                (*cast(uint64_t*)lhsStackRef) /= imm32c;
+                (*cast(uint64_t*)opRef) /= imm32c;
             }
             break;
 
         case LongInst_ImmAnd:
             {
-                (*lhsStackRef) &= hi;
+                (*opRef) &= hi;
             }
             break;
         case LongInst_ImmAnd32:
             {
-                *lhsStackRef = (cast(uint32_t)*lhsStackRef) & hi;
+                *opRef = (cast(uint32_t)*opRef) & hi;
             }
             break;
         case LongInst_ImmOr:
             {
-                (*lhsStackRef) |= hi;
+                (*opRef) |= hi;
             }
             break;
         case LongInst_ImmXor:
             {
-                (*lhsStackRef) ^= hi;
+                (*opRef) ^= hi;
             }
             break;
         case LongInst_ImmXor32:
             {
-                *lhsStackRef = (cast(uint32_t)*lhsStackRef) ^ hi;
+                *opRef = (cast(uint32_t)*opRef) ^ hi;
             }
             break;
 
         case LongInst_ImmLsh:
             {
-                (*lhsStackRef) <<= hi;
+                (*opRef) <<= hi;
             }
             break;
         case LongInst_ImmRsh:
             {
-                (*lhsStackRef) >>= hi;
+                (*opRef) >>= hi;
             }
             break;
 
         case LongInst_ImmMod:
             {
-                (*lhsStackRef) %= imm32c;
+                (*opRef) %= imm32c;
             }
             break;
         case LongInst_ImmUmod:
             {
-                (*cast(uint64_t*)lhsStackRef) %= imm32c;
+                (*cast(uint64_t*)opRef) %= imm32c;
             }
             break;
 
         case LongInst_SetImm8:
             {
-                (*lhsStackRef) = hi;
+                (*opRef) = hi;
                 assert(hi <= UINT8_MAX);
             }
             break;
         case LongInst_SetImm32:
             {
-                (*lhsStackRef) = hi;
+                (*opRef) = hi;
             }
             break;
         case LongInst_SetHighImm32:
             {
                 uint64_t hi64 = hi;
-                *lhsStackRef = (*lhsStackRef & 0x00000000FFFFFFFF) | ((hi64) << 32UL);
+                *opRef = (*opRef & 0x00000000FFFFFFFF) | ((hi64) << 32UL);
             }
             break;
         case LongInst_ImmEq:
             {
-                if ((*lhsStackRef) == imm32c)
+                if ((*opRef) == imm32c)
                 {
                     cond = true;
                 }
@@ -1425,7 +1424,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_ImmNeq:
             {
-                if ((*lhsStackRef) != imm32c)
+                if ((*opRef) != imm32c)
                 {
                     cond = true;
                 }
@@ -1438,7 +1437,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 
         case LongInst_ImmUlt:
             {
-                if (((int64_t)(*lhsStackRef)) < cast(uint)hi)
+                if (((int64_t)(*opRef)) < cast(uint)hi)
                 {
                     cond = true;
                 }
@@ -1450,7 +1449,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_ImmUgt:
             {
-                if (((uint64_t)(*lhsStackRef)) > cast(uint)hi)
+                if (((uint64_t)(*opRef)) > cast(uint)hi)
                 {
                     cond = true;
                 }
@@ -1462,7 +1461,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_ImmUle:
             {
-                if (((uint64_t)(*lhsStackRef)) <= cast(uint)hi)
+                if (((uint64_t)(*opRef)) <= cast(uint)hi)
                 {
                     cond = true;
                 }
@@ -1474,7 +1473,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_ImmUge:
             {
-                if (((uint64_t)(*lhsStackRef)) >= cast(uint)hi)
+                if (((uint64_t)(*opRef)) >= cast(uint)hi)
                 {
                     cond = true;
                 }
@@ -1487,7 +1486,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 
         case LongInst_ImmLt:
             {
-                if ((*lhsStackRef) < imm32c)
+                if ((*opRef) < imm32c)
                 {
                     cond = true;
                 }
@@ -1499,7 +1498,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_ImmGt:
             {
-                if ((*lhsStackRef) > imm32c)
+                if ((*opRef) > imm32c)
                 {
                     cond = true;
                 }
@@ -1511,7 +1510,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_ImmLe:
             {
-                if ((*lhsStackRef) <= imm32c)
+                if ((*opRef) <= imm32c)
                 {
                     cond = true;
                 }
@@ -1523,7 +1522,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_ImmGe:
             {
-                if ((*lhsStackRef) >= imm32c)
+                if ((*opRef) >= imm32c)
                 {
                     cond = true;
                 }
@@ -1955,7 +1954,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_JmpNZ:
             {
-                if ((*lhsStackRef) != 0)
+                if ((*opRef) != 0)
                 {
                     state.ip = hi;
                 }
@@ -1963,7 +1962,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_JmpZ:
             {
-                if ((*lhsStackRef) == 0)
+                if ((*opRef) == 0)
                 {
                     state.ip = hi;
                 }
@@ -2121,7 +2120,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             {
                 if (*rhs == 0 && *lhsRef == 0)
                 {
-                    *lhsStackRef = 0;
+                    *opRef = 0;
                 }
                 else
                 {
@@ -2186,7 +2185,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
                         heapPtr->heapData[result_lhs_end ..  result_lhs_end + scaled_rhs_length] =
                             heapPtr->heapData[rhsBase .. rhsBase + scaled_rhs_length];
 
-                        *lhsStackRef = resultPtr;
+                        *opRef = resultPtr;
                     }
                 }
             }
@@ -2278,7 +2277,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
                 uint32_t cpySize = cast(uint32_t) *opRef;
                 uint32_t cpySrc = cast(uint32_t) *rhs;
                 uint32_t cpyDst = cast(uint32_t) *lhsRef;
-                
+
                 if (cpySrc != cpyDst && cpySize != 0)
                 {
                     // assert(cpySize, "cpySize == 0");
@@ -2289,9 +2288,9 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
                     assert(cpyDst >= cpySrc + cpySize || cpyDst + cpySize <= cpySrc);
                     //, "Overlapping MemCpy is not supported --- src: " ~ itos(cpySrc)
                     //    ~ " dst: " ~ itos(cpyDst) ~ " size: " ~ itos(cpySize));
-                    
+
                     uint8_t* heapData = heapPtr->heapData;
-                    
+
                     uint8_t* cpyDstP = heapPtr->heapData + cpyDst;
                     uint8_t* cpySrcP = heapPtr->heapData + cpySrc;
 
@@ -2375,7 +2374,7 @@ L_LongInst_Comment:
     BCValue bailoutValue;
 Lbailout :
     bailoutValue.vType = BCValueType_Bailout;
-    
+
     return bailoutValue;
 }
 
@@ -2399,11 +2398,12 @@ static void inline BCGen_emit2_at(BCGen* self, uint32_t low, uint32_t high, uint
             assert (0);
         }
     }
-    
+
     codeP[0] = low;
     codeP[1] = high;
 }
 
+#ifdef NOMACRO
 static void inline BCGen_emit2(BCGen* self, uint32_t low, uint32_t high)
 {
     uint32_t atIp = self->ip;
@@ -2417,7 +2417,6 @@ static void inline BCGen_emitLongInstSA(BCGen* self, const LongInst i, const Sta
     BCGen_emit2(self
               , i | stackAddrLhs.addr << 16
               , targetAddr.addr);
-    
 }
 
 static inline void BCGen_emitLongInstSS(BCGen* self, const LongInst i, const StackAddr stackAddrLhs,
@@ -2449,14 +2448,52 @@ static inline void BCGen_emitLongInstA(BCGen* self, const LongInst i, const BCAd
               , i
               , targetAddr.addr);
 }
+#else
 
-static inline uint32_t BCGen_currSp(BCGen* self)
-{
-    return self->sp;
+#define BCGen_emit2(SELF, LOW, HIGH) \
+{ \
+    uint32_t atIp = SELF->ip; \
+    SELF->ip += 2; \
+    BCGen_emit2_at(SELF, LOW, HIGH, atIp); \
 }
 
-/// semi-public functions for the vtbl start here
+#define BCGen_emitLongInstSA(SELF, I, LHS_ADDR, TARGET_ADDR) \
+{ \
+    BCGen_emit2(SELF \
+              , I | LHS_ADDR.addr << 16 \
+              , TARGET.addr); \
+}
 
+#define BCGen_emitLongInstSS(SELF, I, LHS_ADDR, RHS_ADDR) \
+{ \
+    BCGen_emit2(SELF \
+              , I \
+              , LHS_ADDR.addr | RHS_ADDR.addr << 16); \
+}
+
+#define BCGen_emitLongInstSI(SELF, I, LHS_ADDR, RHS) \
+{ \
+    BCGen_emit2(SELF \
+              , I | LHS_ADDR.addr \
+              , RHS); \
+}
+
+#define BCGen_emitLongInstSSS(SELF, I, OP_ADDR, LHS_ADDR, RHS_ADDR) \
+{ \
+    BCGen_emit2(SELF \
+              , I | OP_ADDR.addr << 16 \
+              , LHS_ADDR.addr | RHS_ADDR.addr << 16); \
+}
+
+#define BCGen_emitLongInstA(SELF, T, TARGET_ADDR) \
+{ \
+    BCGen_emit2(SELF \
+              , I \
+              , TARGET_ADDR.addr); \
+}
+#endif
+
+/// semi-public functions for the vtbl start here
 BCValue BCGen_genTemporary(BCGen* self, BCType bct)
 {
     BCValue result;
@@ -2503,7 +2540,7 @@ static inline void BCGen_Initialize(BCGen* self, uint32_t n_args, ...)
     self->parameterCount = 0;
     self->temporaryCount = 0;
     self->localCount = 0;
-    
+
     self->byteCodeArray[0] = 0;
     self->byteCodeArray[1] = 0;
     self->byteCodeArray[2] = 0;
@@ -2605,7 +2642,7 @@ static inline BCValue BCGen_genParameter(BCGen* self, BCType bct, const char* na
 
     self->sp += 4;
     p.name = name;
-    
+
     return p;
 }
 
@@ -2638,22 +2675,34 @@ static inline BCValue BCGen_castTo(BCGen* self, BCValue rhs, BCTypeEnum targetTy
     {
         case BCTypeEnum_f52 :
             if (sourceType == BCTypeEnum_f23)
+            {
                 BCGen_emitLongInstSS(self, LongInst_F32ToF64, lhs.stackAddr, rhs.stackAddr);
+            }
             else
+            {
                 BCGen_emitLongInstSS(self, LongInst_IToF64, lhs.stackAddr, rhs.stackAddr);
+            }
         break;
         case BCTypeEnum_f23 :
             if (sourceType == BCTypeEnum_f52)
+            {
                 BCGen_emitLongInstSS(self, LongInst_F64ToF32, lhs.stackAddr, rhs.stackAddr);
+            }
             else
+            {
                 BCGen_emitLongInstSS(self, LongInst_IToF32, lhs.stackAddr, rhs.stackAddr);
+            }
         break;
         case BCTypeEnum_i32 :
         case BCTypeEnum_i64 :
             if (sourceType == BCTypeEnum_f23)
+            {
                 BCGen_emitLongInstSS(self, LongInst_F32ToI, lhs.stackAddr, rhs.stackAddr);
+            }
             else if (sourceType == BCTypeEnum_f52)
+            {
                 BCGen_emitLongInstSS(self, LongInst_F64ToI, lhs.stackAddr, rhs.stackAddr);
+            }
         break;
         default :
             assert(0); //, "me no have no cast for targetType " ~ enumToString(targetType));}
@@ -2681,27 +2730,26 @@ void BCGen_Set(BCGen* self, BCValue lhs, BCValue rhs)
     }
 }
 
-static inline BCValue BCGen_pushOntoStack(BCGen* self, BCValue val)
+static inline BCValue BCGen_pushOntoStack(BCGen* self, BCValue* val)
 {
-    if (!BCValue_isStackValueOrParameter(&val))
+    if (!BCValue_isStackValueOrParameter(val))
     {
         BCValue stackref;
-        stackref.type = val.type;
+        stackref.type = val->type;
         stackref.vType = BCValueType_StackValue;
         stackref.stackAddr.addr = self->sp;
         stackref.temporaryIndex = ++self->temporaryCount;
 
-        BCGen_Set(self, u32(stackref), val);
+        BCGen_Set(self, u32(stackref), *val);
 
-        self->sp += align4(BCTypeEnum_basicTypeSize(val.type.type));
+        self->sp += align4(BCTypeEnum_basicTypeSize(val->type.type));
         return stackref;
     }
     else
     {
-        return val;
+        return *val;
     }
 }
-
 
 static inline void BCGen_emitArithInstruction(BCGen* self
                                             , LongInst inst
@@ -2712,7 +2760,10 @@ static inline void BCGen_emitArithInstruction(BCGen* self
     assert(inst >= LongInst_Add && inst < LongInst_ImmAdd); //,
 //        "Instruction is not in Range for Arith Instructions");
 
-    BCTypeEnum commonType = BCTypeEnum_commonTypeEnum(lhs.type.type, rhs.type.type);
+    BCValueType lhs_type_type = lhs.type.type;
+    BCValueType rhs_type_type = rhs.type.type;
+
+    BCTypeEnum commonType = BCTypeEnum_commonTypeEnum(lhs_type_type, rhs_type_type);
 
     // FIXME Implement utf8 <-> utf32 conversion
     assert(commonType == BCTypeEnum_i32 || commonType == BCTypeEnum_i64
@@ -2722,17 +2773,20 @@ static inline void BCGen_emitArithInstruction(BCGen* self
     //    "only i32, i64, f23, f52, is supported for now not: " ~ enumToString(commonType));
     //assert(lhs.type.type == rhs.type.type, enumToString(lhs.type.type) ~ " != " ~ enumToString(rhs.type.type));
 
-    if (lhs.vType == BCValueType_Immediate)
+    BCValueType lhs_vType = lhs.vType;
+    BCValueType rhs_vType = rhs.vType;
+
+    if (lhs_vType == BCValueType_Immediate)
     {
-        lhs = BCGen_pushOntoStack(self, lhs);
+        lhs = BCGen_pushOntoStack(self, &lhs);
     }
 
     if (resultTypeEnum)
         *resultTypeEnum = commonType;
 
-    if (lhs.type.type == BCTypeEnum_f23)
+    if (lhs_type_type == BCTypeEnum_f23)
     {
-        if(rhs.type.type == BCTypeEnum_i32 || rhs.type.type == BCTypeEnum_u32)
+        if(rhs_type_type == BCTypeEnum_i32 || rhs_type_type == BCTypeEnum_u32)
         {
             if (rhs.vType == BCValueType_Immediate)
             {
@@ -2742,13 +2796,13 @@ static inline void BCGen_emitArithInstruction(BCGen* self
             else
                 rhs = BCGen_castTo(self, rhs, BCTypeEnum_f23);
         }
-        else if (rhs.type.type == BCTypeEnum_f23)
+        else if (rhs_type_type == BCTypeEnum_f23)
         {
-            rhs = BCGen_pushOntoStack(self, rhs);
+            rhs = BCGen_pushOntoStack(self, &rhs);
         }
-        else if (rhs.type.type == BCTypeEnum_f52)
+        else if (rhs_type_type == BCTypeEnum_f52)
         {
-            rhs = BCGen_castTo(self, rhs, lhs.type.type);
+            rhs = BCGen_castTo(self, rhs, lhs_type_type);
         }
         else
             assert(0);//, "did not expect type " ~ enumToString(rhs.type.type) ~ "to be used in a float expression");
@@ -2759,9 +2813,9 @@ static inline void BCGen_emitArithInstruction(BCGen* self
             inst = (LongInst)t;
         }
     }
-    else if (lhs.type.type == BCTypeEnum_f52)
+    else if (lhs_type_type == BCTypeEnum_f52)
     {
-        if(rhs.type.type != BCTypeEnum_f52)
+        if(rhs_type_type != BCTypeEnum_f52)
         {
             // TOOD there was
             // assert (rhs.type.type == BCTypeEnum_f52)
@@ -2769,18 +2823,18 @@ static inline void BCGen_emitArithInstruction(BCGen* self
             rhs = BCGen_castTo(self, rhs, BCTypeEnum_f52);
         }
 
-        rhs = BCGen_pushOntoStack(self, rhs);
+        rhs = BCGen_pushOntoStack(self, &rhs);
         if (inst != LongInst_Set)
         {
             int t = (int)inst;
             t += ((int)LongInst_FAdd64 - (int)LongInst_Add);
-            inst = (LongInst)t; 
+            inst = (LongInst)t;
         }
     }
     else if (rhs.vType == BCValueType_Immediate)
     {
-        const int64_t imm64s = (BCTypeEnum_basicTypeSize(rhs.type.type) == 8 ? cast(int64_t)rhs.imm64.imm64 : 0);
-        if  (BCTypeEnum_basicTypeSize(rhs.type.type) <= 4 || (imm64s <= INT32_MAX && imm64s > -INT32_MAX))
+        const int64_t imm64s = (BCTypeEnum_basicTypeSize(rhs_type_type) == 8 ? cast(int64_t)rhs.imm64.imm64 : 0);
+        if  (BCTypeEnum_basicTypeSize(rhs_type_type) <= 4 || (imm64s <= INT32_MAX && imm64s > -INT32_MAX))
         {
             //Change the instruction into the corresponding Imm Instruction;
             if (inst != LongInst_Set)
@@ -2798,7 +2852,7 @@ static inline void BCGen_emitArithInstruction(BCGen* self
         }
         else
         {
-            rhs = BCGen_pushOntoStack(self, rhs);
+            rhs = BCGen_pushOntoStack(self, &rhs);
         }
     }
 
@@ -2812,23 +2866,28 @@ static inline void BCGen_emitArithInstruction(BCGen* self
     }
 }
 
-static inline void BCGen_emitFlg(BCGen* self, BCValue lhs)
+static inline void BCGen_emitFlag(BCGen* self, BCValue* lhs)
 {
-    assert(BCValue_isStackValueOrParameter(&lhs));
-    BCGen_emit2(self, BCGen_ShortInst16(LongInst_Flg, lhs.stackAddr.addr), 0);
+    assert(BCValue_isStackValueOrParameter(lhs));
+    BCGen_emit2(self, BCGen_ShortInst16(LongInst_Flg, lhs->stackAddr.addr), 0);
+}
+
+static inline void BCGen_Cmp(BCGen* self, BCValue *result, BCValue *lhs, BCValue *rhs, LongInst cmp)
+{
+    assert(result->vType == BCValueType_Unknown
+        || BCValue_isStackValueOrParameter(result));
+
+    BCGen_emitArithInstruction(self, cmp, *lhs, *rhs, 0);
+
+    if (result->vType != BCValueType_Unknown)
+    {
+        BCGen_emitFlag(self, result);
+    }
 }
 
 static inline void BCGen_Gt3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
 {
-    assert(result.vType == BCValueType_Unknown
-        || BCValue_isStackValueOrParameter(&result));
-
-    BCGen_emitArithInstruction(self, LongInst_Gt, lhs, rhs, 0);
-
-    if (result.vType != BCValueType_Unknown)
-    {
-        BCGen_emitFlg(self, result);
-    }
+    BCGen_Cmp(self, &result, &lhs, &rhs, LongInst_Gt);
 }
 
 static inline void BCGen_Ugt3(BCGen* self, BCValue result, BCValue lhs, BCValue rhs)
@@ -2840,7 +2899,7 @@ static inline void BCGen_Ugt3(BCGen* self, BCValue result, BCValue lhs, BCValue 
 
     if (result.vType != BCValueType_Unknown)
     {
-        BCGen_emitFlg(self, result);
+        BCGen_emitFlag(self, &result);
     }
 }
 
@@ -2853,7 +2912,7 @@ static inline void BCGen_Uge3(BCGen* self, BCValue result, BCValue lhs, BCValue 
 
     if (result.vType != BCValueType_Unknown)
     {
-        BCGen_emitFlg(self, result);
+        BCGen_emitFlag(self, &result);
     }
 }
 
@@ -2866,7 +2925,7 @@ static inline void BCGen_Ult3(BCGen* self, BCValue result, BCValue lhs, BCValue 
 
     if (result.vType != BCValueType_Unknown)
     {
-        BCGen_emitFlg(self, result);
+        BCGen_emitFlag(self, &result);
     }
 }
 
@@ -2879,7 +2938,7 @@ static inline void BCGen_Ule3(BCGen* self, BCValue result, BCValue lhs, BCValue 
 
     if (result.vType != BCValueType_Unknown)
     {
-        BCGen_emitFlg(self, result);
+        BCGen_emitFlag(self, &result);
     }
 }
 
@@ -2892,7 +2951,7 @@ static inline void BCGen_Ge3(BCGen* self, BCValue result, BCValue lhs, BCValue r
 
     if (result.vType != BCValueType_Unknown)
     {
-        BCGen_emitFlg(self, result);
+        BCGen_emitFlag(self, &result);
     }
 }
 
@@ -2905,7 +2964,7 @@ static inline void BCGen_Lt3(BCGen* self, BCValue result, BCValue lhs, BCValue r
 
     if (result.vType != BCValueType_Unknown)
     {
-        BCGen_emitFlg(self, result);
+        BCGen_emitFlag(self, &result);
     }
 }
 
@@ -2918,7 +2977,7 @@ static inline void BCGen_Le3(BCGen* self, BCValue result, BCValue lhs, BCValue r
 
     if (result.vType != BCValueType_Unknown)
     {
-        BCGen_emitFlg(self, result);
+        BCGen_emitFlag(self, &result);
     }
 }
 
@@ -2932,7 +2991,7 @@ static inline void BCGen_Le3(BCGen* self, BCValue result, BCValue lhs, BCValue r
 \
         if (result.vType != BCValueType_Unknown) \
         { \
-            BCGen_emitFlg(self, result); \
+            BCGen_emitFlag(self, &result); \
         } \
     }
 BC_CMP_INST(Eq)
@@ -2945,7 +3004,7 @@ static inline void BCGen_Neq3(BCGen* self, BCValue result, BCValue lhs, BCValue 
 
     if (result.vType != BCValueType_Unknown)
     {
-        BCGen_emitFlg(self, result);
+        BCGen_emitFlag(self, &result);
     }
 }
 
@@ -3109,12 +3168,12 @@ void BCGen_Store8(BCGen* self, BCValue _to, BCValue value)
 {
     if (!BCValue_isStackValueOrParameter(&value))
     {
-        value = BCGen_pushOntoStack(self, value);
+        value = BCGen_pushOntoStack(self, &value);
     }
 
     if (!BCValue_isStackValueOrParameter(&_to))
     {
-        _to = BCGen_pushOntoStack(self, _to);
+        _to = BCGen_pushOntoStack(self, &_to);
     }
     BCGen_emitLongInstSS(self, LongInst_HeapStore8, _to.stackAddr, value.stackAddr);
 }
@@ -3123,12 +3182,12 @@ void BCGen_Store16(BCGen* self, BCValue _to, BCValue value)
 {
     if (!BCValue_isStackValueOrParameter(&value))
     {
-        value = BCGen_pushOntoStack(self, value);
+        value = BCGen_pushOntoStack(self, &value);
     }
 
     if (!BCValue_isStackValueOrParameter(&_to))
     {
-        _to = BCGen_pushOntoStack(self, _to);
+        _to = BCGen_pushOntoStack(self, &_to);
     }
     BCGen_emitLongInstSS(self, LongInst_HeapStore16, _to.stackAddr, value.stackAddr);
 }
@@ -3137,12 +3196,12 @@ void BCGen_Store32(BCGen* self, BCValue _to, BCValue value)
 {
     if (!BCValue_isStackValueOrParameter(&value))
     {
-        value = BCGen_pushOntoStack(self, value);
+        value = BCGen_pushOntoStack(self, &value);
     }
 
     if (!BCValue_isStackValueOrParameter(&_to))
     {
-        _to = BCGen_pushOntoStack(self, _to);
+        _to = BCGen_pushOntoStack(self, &_to);
     }
     BCGen_emitLongInstSS(self, LongInst_HeapStore32, _to.stackAddr, value.stackAddr);
 }
@@ -3151,12 +3210,12 @@ void BCGen_Store64(BCGen* self, BCValue _to, BCValue value)
 {
     if (!BCValue_isStackValueOrParameter(&value))
     {
-        value = BCGen_pushOntoStack(self, value);
+        value = BCGen_pushOntoStack(self, &value);
     }
 
     if (!BCValue_isStackValueOrParameter(&_to))
     {
-        _to = BCGen_pushOntoStack(self, _to);
+        _to = BCGen_pushOntoStack(self, &_to);
     }
     BCGen_emitLongInstSS(self, LongInst_HeapStore64, _to.stackAddr, value.stackAddr);
 }
@@ -3165,12 +3224,12 @@ void BCGen_Load8(BCGen* self, BCValue _to, BCValue from)
 {
     if (!BCValue_isStackValueOrParameter(&from))
     {
-        from = BCGen_pushOntoStack(self, from);
+        from = BCGen_pushOntoStack(self, &from);
     }
 
     if (!BCValue_isStackValueOrParameter(&_to))
     {
-        _to = BCGen_pushOntoStack(self, _to);
+        _to = BCGen_pushOntoStack(self, &_to);
     }
     BCGen_emitLongInstSS(self, LongInst_HeapLoad8, _to.stackAddr, from.stackAddr);
 }
@@ -3179,12 +3238,12 @@ void BCGen_Load16(BCGen* self, BCValue _to, BCValue from)
 {
     if (!BCValue_isStackValueOrParameter(&from))
     {
-        from = BCGen_pushOntoStack(self, from);
+        from = BCGen_pushOntoStack(self, &from);
     }
 
     if (!BCValue_isStackValueOrParameter(&_to))
     {
-        _to = BCGen_pushOntoStack(self, _to);
+        _to = BCGen_pushOntoStack(self, &_to);
     }
     BCGen_emitLongInstSS(self, LongInst_HeapLoad16, _to.stackAddr, from.stackAddr);
 }
@@ -3193,12 +3252,12 @@ void BCGen_Load32(BCGen* self, BCValue _to, BCValue from)
 {
     if (!BCValue_isStackValueOrParameter(&from))
     {
-        from = BCGen_pushOntoStack(self, from);
+        from = BCGen_pushOntoStack(self, &from);
     }
 
     if (!BCValue_isStackValueOrParameter(&_to))
     {
-        _to = BCGen_pushOntoStack(self, _to);
+        _to = BCGen_pushOntoStack(self, &_to);
     }
     BCGen_emitLongInstSS(self, LongInst_HeapLoad32, _to.stackAddr, from.stackAddr);
 }
@@ -3207,20 +3266,29 @@ void BCGen_Load64(BCGen* self, BCValue _to, BCValue from)
 {
     if (!BCValue_isStackValueOrParameter(&from))
     {
-        from = BCGen_pushOntoStack(self, from);
+        from = BCGen_pushOntoStack(self, &from);
     }
 
     if (!BCValue_isStackValueOrParameter(&_to))
     {
-        _to = BCGen_pushOntoStack(self, _to);
+        _to = BCGen_pushOntoStack(self, &_to);
     }
     BCGen_emitLongInstSS(self, LongInst_HeapLoad64, _to.stackAddr, from.stackAddr);
 }
 
-static inline void BCGen_Ret(BCGen*self, BCValue val)
+static inline void BCGen_MemCpy(BCGen* self, BCValue dst, BCValue src, BCValue size)
+{
+    size = BCGen_pushOntoStack(self, &size);
+    src = BCGen_pushOntoStack(self, &src);
+    dst = BCGen_pushOntoStack(self, &dst);
+
+    BCGen_emitLongInstSSS(self, LongInst_MemCpy, size.stackAddr, dst.stackAddr, src.stackAddr);
+}
+
+static inline void BCGen_Ret(BCGen* self, BCValue val)
 {
     LongInst inst = ((BCTypeEnum_basicTypeSize(val.type.type) == 8) ? LongInst_Ret64 : LongInst_Ret32);
-    val = BCGen_pushOntoStack(self, val);
+    val = BCGen_pushOntoStack(self, &val);
 
     if (BCValue_isStackValueOrParameter(&val))
     {
@@ -3357,7 +3425,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         src = BCGen_pushOntoStack(src);
         dst = BCGen_pushOntoStack(dst);
 
-        BCGen_emitLongInstSS(self, LongInst_MemCpy, size.stackAddr, dst.stackAddr, src.stackAddr);
+        BCGen_emitLongInstSSS(self, LongInst_MemCpy, size.stackAddr, dst.stackAddr, src.stackAddr);
     }
 
 
@@ -3431,7 +3499,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     void Prt(BCValue value, bool isString = false)
     {
         if (value.vType == BCValueType.Immediate)
-            value = BCGen_pushOntoStack(self, value);
+            value = BCGen_pushOntoStack(self, &value);
 
         byteCodeArray[ip] = ShortInst16Ex(LongInst_PrintValue, isString, value.stackAddr);
         byteCodeArray[ip + 1] = 0;
@@ -3477,11 +3545,11 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (!BCValue_isStackValueOrParameter(&from))
         {
-            from = BCGen_pushOntoStack(self, from);
+            from = BCGen_pushOntoStack(self, &from);
         }
         if (!BCValue_isStackValueOrParameter(&_to))
         {
-            _to = BCGen_pushOntoStack(self, _to);
+            _to = BCGen_pushOntoStack(self, &_to);
         }
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
         assert(BCValue_isStackValueOrParameter(&from), "from has the vType " ~ enumToString(from.vType));
@@ -3493,12 +3561,12 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (!BCValue_isStackValueOrParameter(&value))
         {
-            value = BCGen_pushOntoStack(self, value);
+            value = BCGen_pushOntoStack(self, &value);
         }
 
         if (!BCValue_isStackValueOrParameter(&_to))
         {
-            _to = BCGen_pushOntoStack(self, _to);
+            _to = BCGen_pushOntoStack(self, &_to);
         }
 
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
@@ -3511,11 +3579,11 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (!BCValue_isStackValueOrParameter(&from))
         {
-            from = BCGen_pushOntoStack(self, from);
+            from = BCGen_pushOntoStack(self, &from);
         }
         if (!BCValue_isStackValueOrParameter(&_to))
         {
-            _to = BCGen_pushOntoStack(self, _to);
+            _to = BCGen_pushOntoStack(self, &_to);
         }
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
         assert(BCValue_isStackValueOrParameter(&from), "from has the vType " ~ enumToString(from.vType));
@@ -3527,12 +3595,12 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (!BCValue_isStackValueOrParameter(&value))
         {
-            value = BCGen_pushOntoStack(self, value);
+            value = BCGen_pushOntoStack(self, &value);
         }
         
         if (!BCValue_isStackValueOrParameter(&_to))
         {
-            _to = BCGen_pushOntoStack(self, _to);
+            _to = BCGen_pushOntoStack(self, &_to);
         }
         
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
@@ -3546,12 +3614,12 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (!BCValue_isStackValueOrParameter(&value))
         {
-            value = BCGen_pushOntoStack(self, value);
+            value = BCGen_pushOntoStack(self, &value);
         }
 
         if (!BCValue_isStackValueOrParameter(&_to))
         {
-            _to = BCGen_pushOntoStack(self, _to);
+            _to = BCGen_pushOntoStack(self, &_to);
         }
 
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
@@ -3564,11 +3632,11 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (!BCValue_isStackValueOrParameter(&from))
         {
-            from = BCGen_pushOntoStack(self, from);
+            from = BCGen_pushOntoStack(self, &from);
         }
         if (!BCValue_isStackValueOrParameter(&_to))
         {
-            _to = BCGen_pushOntoStack(self, _to);
+            _to = BCGen_pushOntoStack(self, &_to);
         }
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
         assert(BCValue_isStackValueOrParameter(&from), "from has the vType " ~ enumToString(from.vType));
@@ -3580,12 +3648,12 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     {
         if (!BCValue_isStackValueOrParameter(&value))
         {
-            value = BCGen_pushOntoStack(self, value);
+            value = BCGen_pushOntoStack(self, &value);
         }
         if (!BCValue_isStackValueOrParameter(&_to))
 
         {
-            _to = BCGen_pushOntoStack(self, _to);
+            _to = BCGen_pushOntoStack(self, &_to);
         }
 
         assert(BCValue_isStackValueOrParameter(&_to), "to has the vType " ~ enumToString(_to.vType));
@@ -3706,7 +3774,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
 
         if (BCValue_isStackValueOrParameter(&result))
         {
-            emitFlg(result);
+            emitFlag(result);
         }
     }
 
@@ -3742,10 +3810,6 @@ static inline void BCGen_Alloc(BCGen* self, BCValue heapPtr, BCValue size)
 }
 
 static inline void BCGen_Assert(BCGen* self, BCValue value, BCValue err)
-{
-}
-
-static inline void BCGen_MemCpy(BCGen* self, BCValue dst, BCValue src, BCValue size)
 {
 }
 
@@ -3850,7 +3914,7 @@ const BackendInterface BCGen_interface = {
     .destroyTemporary = (destroyTemporary_t) BCGen_destroyTemporary,
     .genLocal = (genLocal_t) BCGen_genLocal,
     .genParameter = (genParameter_t) BCGen_genParameter,
-    .emitFlg = (emitFlg_t) BCGen_emitFlg,
+    .emitFlag = (emitFlag_t) BCGen_emitFlag,
     .Alloc = (Alloc_t) BCGen_Alloc,
     .Assert = (Assert_t) BCGen_Assert,
     .MemCpy = (MemCpy_t) BCGen_MemCpy,
