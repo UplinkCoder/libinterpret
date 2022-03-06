@@ -3093,21 +3093,6 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         ip += 2;
     }
 
-    void Not(BCValue result, BCValue val)
-    {
-        if (result != val)
-        {
-            Set(result, val);
-            val = result;
-        }
-        if (val.vType == BCValueType_Immediate)
-            val = BCGen_pushOntoStack(val);
-
-        byteCodeArray[ip] = ShortInst16(LongInst_Not, val.stackAddr);
-        byteCodeArray[ip + 1] = 0;
-        ip += 2;
-    }
-
     
     void Call(BCValue result, BCValue fn, BCValue[] args)
     {
@@ -3359,6 +3344,19 @@ static inline void BCGen_Prt(BCGen* self, const BCValue* value, bool isString)
 
 static inline void BCGen_Not(BCGen* self, BCValue *result, const BCValue* val)
 {
+    BCValue newVal;
+    if (result != val && !BCValue_eq(result, val))
+    {
+        BCGen_Set(self, result, val);
+        val = result;
+    }
+    else if (val->vType == BCValueType_Immediate)
+    {
+        newVal = BCGen_pushOntoStack(self, val);
+        val = &newVal;
+    }
+
+    BCGen_emit2(self, BCGen_ShortInst16(LongInst_Not, val->stackAddr.addr), 0);
 }
 
 static inline void BCGen_Call(BCGen* self, BCValue *result, const BCValue* fn, BCValue* args, uint32_t n_args)
@@ -3418,29 +3416,24 @@ static inline void BCGen_PopCatch(BCGen* self)
 {
 }
 
-static inline void BCGen_IToF32(BCGen* self, BCValue *result, const BCValue* rhs)
+static inline void BCGen_FPConv(BCGen* self, BCValue* result, const BCValue* rhs, LongInst Inst)
 {
+    assert(BCValue_isStackValueOrParameter(result));
+    assert(BCValue_isStackValueOrParameter(rhs));
+
+    BCGen_emitLongInstSS(self, Inst, result->stackAddr, rhs->stackAddr);
 }
 
-static inline void BCGen_IToF64(BCGen* self, BCValue *result, const BCValue* rhs)
-{
-}
+#define BC_FP_CONV_FUNC(OP) \
+static inline void BCGen_##OP(BCGen* self, BCValue* result, const BCValue* rhs) \
+    { BCGen_FPConv(self, result, rhs, LongInst_##OP); }
 
-static inline void BCGen_F32ToI(BCGen* self, BCValue *result, const BCValue* rhs)
-{
-}
-
-static inline void BCGen_F64ToI(BCGen* self, BCValue *result, const BCValue* rhs)
-{
-}
-
-static inline void BCGen_F32ToF64(BCGen* self, BCValue *result, const BCValue* rhs)
-{
-}
-
-static inline void BCGen_F64ToF32(BCGen* self, BCValue *result, const BCValue* rhs)
-{
-}
+BC_FP_CONV_FUNC(IToF32)
+BC_FP_CONV_FUNC(IToF64)
+BC_FP_CONV_FUNC(F32ToI)
+BC_FP_CONV_FUNC(F64ToI)
+BC_FP_CONV_FUNC(F32ToF64)
+BC_FP_CONV_FUNC(F64ToF32)
 
 static inline void BCGen_Memcmp(BCGen* self, BCValue *result, const BCValue* lhs, const BCValue* rhs)
 {
