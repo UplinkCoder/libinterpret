@@ -207,7 +207,7 @@ struct RegisterState
 
     /// value in register is unlikely to be used again
     /// mark this register as a canidate for eviction
-    void markUnused(jit_reg_t reg)
+    void markEvictionCanidate(jit_reg_t reg)
     {
         const idx = reg2idx(reg);
         const pair_idx = pairedWith[idx - 1];
@@ -221,7 +221,7 @@ struct RegisterState
         }
         else
         {
-            regStatus.markUnused(idx);
+            regStatus.markEvictionCanidate(idx);
         }
     }
 
@@ -906,7 +906,7 @@ struct LightningGen
         {
             auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_ww(_jit, jit_code_t.jit_code_movr, lhs_r, rhs_r);
-            regs.markUnused(rhs_r);
+            regs.markEvictionCanidate(rhs_r);
         }
         regs.regStatus.markDirty(reg2idx(lhs_r));
     }
@@ -934,7 +934,7 @@ struct LightningGen
         {
             auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_ltr_u, result_r, lhs_r, rhs_r);
-            regs.markUnused(rhs_r);
+            regs.markEvictionCanidate(rhs_r);
         }
     }
 
@@ -961,7 +961,7 @@ struct LightningGen
         {
             auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_gtr_u, result_r, lhs_r, rhs_r);
-            regs.markUnused(rhs_r);
+            regs.markEvictionCanidate(rhs_r);
         }
     }
 
@@ -988,7 +988,7 @@ struct LightningGen
         {
             auto rhs_r = getSingleRegister(rhs);
             _jit_new_node_www(_jit, jit_code_t.jit_code_ler_u, result_r, lhs_r, rhs_r);
-            regs.markUnused(rhs_r);
+            regs.markEvictionCanidate(rhs_r);
         }
     }
 
@@ -1192,12 +1192,12 @@ struct LightningGen
             {
                 auto rhs_r = getSingleRegister(rhs);
                 _jit_new_node_www(_jit, jit_code_t.jit_code_addr, res_r, lhs_r, rhs_r);
-                regs.markUnused(rhs_r);
+                regs.markEvictionCanidate(rhs_r);
             }
         }
         else
             assert (0, "only integers are supported right now ... not: " ~ commonType.enumToString());
-        regs.markUnused(lhs_r);
+        regs.markEvictionCanidate(lhs_r);
     }
 
     void Sub3(BCValue result, BCValue lhs, BCValue rhs)
@@ -1216,12 +1216,12 @@ struct LightningGen
             {
                 auto rhs_r = getSingleRegister(rhs);
                 _jit_new_node_www(_jit, jit_code_t.jit_code_subr, res_r, lhs_r, rhs_r);
-                regs.markUnused(rhs_r);
+                regs.markEvictionCanidate(rhs_r);
             }
         }
         else
             assert (0, "only integers are supported right now");
-        regs.markUnused(lhs_r);
+        regs.markEvictionCanidate(lhs_r);
     }
 
     void Mul3(BCValue result, BCValue lhs, BCValue rhs)
@@ -1239,12 +1239,12 @@ struct LightningGen
             {
                 auto rhs_r = getSingleRegister(rhs);
                 _jit_new_node_www(_jit, jit_code_t.jit_code_mulr, res_r, lhs_r, rhs_r);
-                regs.markUnused(rhs_r);
+                regs.markEvictionCanidate(rhs_r);
             }
         }
         else
             assert (0, "only integers are supported right now");
-        regs.markUnused(lhs_r);
+        regs.markEvictionCanidate(lhs_r);
     }
 
     void Div3(BCValue result, BCValue lhs, BCValue rhs)
@@ -1262,12 +1262,12 @@ struct LightningGen
             {
                 auto rhs_r = getSingleRegister(rhs);
                 _jit_new_node_www(_jit, jit_code_t.jit_code_divr, res_r, lhs_r, rhs_r);
-                regs.markUnused(rhs_r);
+                regs.markEvictionCanidate(rhs_r);
             }
         }
         else
             assert (0, "only integers are supported right now");
-        regs.markUnused(lhs_r);
+        regs.markEvictionCanidate(lhs_r);
      }
 
     void Udiv3(BCValue result, BCValue lhs, BCValue rhs)
@@ -1285,12 +1285,12 @@ struct LightningGen
             {
                 auto rhs_r = getSingleRegister(rhs);
                 _jit_new_node_www(_jit, jit_code_t.jit_code_divr_u, res_r, lhs_r, rhs_r);
-                regs.markUnused(rhs_r);
+                regs.markEvictionCanidate(rhs_r);
             }
         }
         else
             assert (0, "only integers are supported right now");
-        regs.markUnused(lhs_r);
+        regs.markEvictionCanidate(lhs_r);
     }
 
     void And3(BCValue result, BCValue lhs, BCValue rhs)
@@ -1308,12 +1308,12 @@ struct LightningGen
             {
                 auto rhs_r = getSingleRegister(rhs);
                 _jit_new_node_www(_jit, jit_code_t.jit_code_andr, res_r, lhs_r, rhs_r);
-                regs.markUnused(rhs_r);
+                regs.markEvictionCanidate(rhs_r);
             }
         }
         else
             assert (0, "only 32 bit integers are supported right now");
-        regs.markUnused(lhs_r);
+        regs.markEvictionCanidate(lhs_r);
     }
     void Or3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }
     void Xor3(BCValue result, BCValue lhs, BCValue rhs) { assert(0, "Not Implemented yet"); }

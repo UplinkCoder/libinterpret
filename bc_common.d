@@ -416,7 +416,7 @@ struct RegStatusList(int STATIC_NREGS)
     }
     
     /// mark register as eviction canidate
-    void markUnused(int regIdx)
+    void markEvictionCanidate(int regIdx)
     {
         pragma(inline, true);
         assert(regIdx && regIdx <= NREGS);
@@ -484,7 +484,7 @@ static assert(()
         f.markClean(nextReg);
         assert(f.nextDirty() == 0);
         foreach(r; 1 .. 17)
-            f.markUnused(r);
+            f.markEvictionCanidate(r);
         foreach(r; 0 .. 16)
         {
             auto nextUnused = f.nextUnused();
