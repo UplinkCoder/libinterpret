@@ -26,7 +26,6 @@ typedef void (*Comment_t) (void* ctx, const char* comment);
 typedef void (*Prt_t) (void* ctx, const BCValue* value, bool isString);
 
 typedef void (*Set_t) (void* ctx, BCValue *lhs, const BCValue* rhs);
-typedef void (*SetHigh_t) (void* ctx, BCValue *lhs, const BCValue* rhs);
 typedef void (*Ult3_t) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs);
 typedef void (*Ule3_t) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs);
 typedef void (*Lt3_t) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs);
@@ -115,7 +114,6 @@ typedef struct BackendInterface
     const Prt_t Prt;
 
     const Set_t Set;
-    const SetHigh_t SetHigh;
     const Ult3_t Ult3;
     const Ule3_t Ule3;
     const Lt3_t Lt3;

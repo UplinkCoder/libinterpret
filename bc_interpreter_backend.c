@@ -265,7 +265,6 @@ typedef struct BCFunction
 
 typedef struct BCGen
 {
-    uint32_t byteCodeArray[8192];
     uint32_t* byteCodeArrayExtra;
     uint32_t byteCodeCount;
     uint32_t byteCodeExtraCapacity;
@@ -294,6 +293,7 @@ typedef struct BCGen
     uint32_t callCapacity;
 
     bool finalized;
+    uint32_t byteCodeArray[8192];
 } BCGen;
 
 static const int max_call_depth = 2000;
@@ -1397,7 +1397,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_ImmRsh:
             {
-                (*opRef) >>= hi;
+                (*cast(uint64_t*)opRef) >>= hi;
             }
             break;
 
@@ -1610,7 +1610,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_Rsh:
             {
-                (*lhsRef) >>= *rhs;
+                (*cast(uint64_t*)lhsRef) >>= *rhs;
             }
             break;
         case LongInst_Mod:
@@ -3073,41 +3073,6 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         return BCLabel(ip);
     }
 
-    CndJmpBegin beginCndJmp(const BCValue* cond = BCValue.init, bool ifTrue = false)
-    {
-        if (cond.vType == BCValueType_Immediate)
-        {
-            cond = BCGen_pushOntoStack(cond);
-        }
-
-        auto result = CndJmpBegin(ip, cond, ifTrue);
-        ip += 2;
-        return result;
-    }
-
-    void endCndJmp(CndJmpBegin jmp, BCLabel target)
-    {
-        auto atIp = jmp.at;
-        auto cond = jmp.cond;
-        auto ifTrue = jmp.ifTrue;
-
-        LongInst64 lj;
-
-        if (BCValue_isStackValueOrParameter(&cond))
-        {
-            lj = (ifTrue ? LongInst64(LongInst_JmpNZ, cond.stackAddr,
-                target.addr) : LongInst64(LongInst_JmpZ, cond.stackAddr, target.addr));
-        }
-        else // if (cond == bcLastCond)
-        {
-            lj = (ifTrue ? LongInst64(LongInst_JmpTrue,
-                target.addr) : LongInst64(LongInst_JmpFalse, target.addr));
-        }
-
-        byteCodeArray[atIp] = lj.lw;
-        byteCodeArray[atIp + 1] = lj.hi;
-    }
-
     void Jmp(BCLabel target)
     {
         assert(target.addr);
@@ -3115,102 +3080,6 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         {
             auto at = beginJmp();
             endJmp(at, target);
-        }
-    }
-
-    void Assert(const BCValue* value, const BCValue* err, uint l = __LINE__)
-    {
-        BCValue _msg;
-        if (BCValue_isStackValueOrParameter(&err))
-        {
-            assert(0);//, "err.vType is not Error but: " ~ enumToString(err.vType));
-        }
-
-        if (value)
-        {
-            emitLongInst(LongInst_Assert, pushOntoStack(value).stackAddr, imm32(err));
-        }
-        else
-        {
-            assert(0, "BCValue.init is no longer a valid value for assert -- fromLine: " ~ itos(l));
-        }
-
-    }
-
-    void MemCpy(BCValue *dst, BCValue src, BCValue size)
-    {
-        size = BCGen_pushOntoStack(size);
-        src = BCGen_pushOntoStack(src);
-        dst = BCGen_pushOntoStack(dst);
-
-        BCGen_emitLongInstSSS(self, LongInst_MemCpy, size.stackAddr, dst.stackAddr, src.stackAddr);
-    }
-
-
-    void outputBytes(const (char)[] s)
-    {
-        outputBytes(cast(const ubyte[]) s);
-    }
-
-    void outputBytes (const ubyte[] bytes)
-    {
-        auto len = bytes.length;
-        size_t idx = 0;
-
-        while (len >= 4)
-        {
-            byteCodeArray[ip++] =
-                bytes[idx+0] << 0 |
-                bytes[idx+1] << 8 |
-                bytes[idx+2] << 16 |
-                bytes[idx+3] << 24;
-
-            idx += 4;
-            len -= 4;
-        }
-
-        uint lastField;
-
-        final switch(len)
-        {
-            case 3 :
-                lastField |= bytes[idx+2] << 16;
-                goto case;
-            case 2 :
-                lastField |= bytes[idx+1] << 8;
-                goto case;
-            case 1 :
-                lastField |= bytes[idx+0] << 0;
-                byteCodeArray[ip++] = lastField;
-                goto case;
-            case 0 :
-                break;
-        }
-    }
-
-    void File(string filename)
-    {
-        auto filenameLength = cast(uint) filename.length;
-
-        emitLongInst(LongInst_File, StackAddr.init, Imm32(filenameLength));
-
-        outputBytes(filename);
-    }
-
-    void Line(uint line)
-    {
-         emitLongInst(LongInst_Line, StackAddr(0), Imm32(line));
-    }
-
-    void Comment(lazy const (char)[] comment)
-    {
-        debug
-        {
-            uint commentLength = cast(uint) comment.length;
-
-            emitLongInstSI(LongInst_Comment, StackAddr.init, commentLength);
-
-            outputBytes(comment);
         }
     }
 
@@ -3240,18 +3109,6 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     }
 
     
-    void SetHigh(BCValue lhs, BCValue rhs)
-    {
-        assert(BCValue_isStackValueOrParameter(&lhs), "SetHigh lhs is has to be a StackValue");
-        assert(rhs.vType == BCValueType_Immediate || BCValue_isStackValueOrParameter(&rhs), "SetHigh rhs is has to be a StackValue or Imm");
-        assert(0, "SetHigh is not implemented");
-        //two cases :
-        //    lhs.type.size == 4 && rhs.type.size == 8
-        // OR
-        //    lhs.type.size == 8 && rhs.type.size == 4
-
-    }
-
     void Call(BCValue result, BCValue fn, BCValue[] args)
     {
         auto call_id = BCGen_pushOntoStack(imm32(callCount + 1)).stackAddr;
@@ -3421,25 +3278,82 @@ static inline void BCGen_Alloc(BCGen* self, BCValue *heapPtr, const BCValue* siz
 
 static inline void BCGen_Assert(BCGen* self, const BCValue* value, const BCValue* err)
 {
+    assert((err->vType == BCValueType_Error
+        || err->vType == BCValueType_Immediate)
+        && (err->type.type == BCTypeEnum_i32
+        || err->type.type == BCTypeEnum_u32));
+
+    assert(BCValue_isStackValueOrParameter(value));
+    {
+        BCGen_emitLongInstSI(self, LongInst_Assert, BCGen_pushOntoStack(self, value).stackAddr, err->imm32.imm32);
+    }
 }
+
+void BCGen_outputBytes (BCGen* self, const int8_t* bytes, uint32_t length)
+{
+    uint32_t idx = 0;
+
+    while (length >= 8)
+    {
+        BCGen_emit2(self,
+            bytes[idx+0] << 0 | bytes[idx+1] << 8 | bytes[idx+2] << 16 | bytes[idx+3] << 24,
+            bytes[idx+4] << 0 | bytes[idx+5] << 8 | bytes[idx+6] << 16 | bytes[idx+7] << 24
+        );
+
+        idx += 8;
+        length -= 8;
+    }
+
+    uint32_t lastField1 = 0;
+    uint32_t lastField2 = 0;
+
+    switch(length)
+    {
+        case 7 :
+            lastField2 |= bytes[idx+6] << 16;
+        case 6 :
+            lastField2 |= bytes[idx+5] << 8;
+        case 5 :
+            lastField2 |= bytes[idx+4] << 0;
+        case 4 :
+            lastField2 |= bytes[idx+3] << 24;
+        case 3 :
+            lastField1 |= bytes[idx+2] << 16;
+        case 2 :
+            lastField1 |= bytes[idx+1] << 8;
+        case 1 :
+            lastField1 |= bytes[idx+0] << 0;
+            BCGen_emit2(self, lastField1, lastField2);
+        case 0 :
+            break;
+    }
+}
+
 
 static inline void BCGen_File(BCGen* self, const char* filename)
 {
+    uint32_t filenameLength = cast(uint32_t) strlen(filename);
+    const StackAddr a = {0};
+    BCGen_emitLongInstSI(self, LongInst_File, a, filenameLength);
+    BCGen_outputBytes(self, filename, filenameLength);
 }
 
 static inline void BCGen_Line(BCGen* self, uint32_t line)
 {
+   const StackAddr a = {0};
+   BCGen_emitLongInstSI(self, LongInst_Line, a, line);
 }
 
 static inline void BCGen_Comment(BCGen* self, const char* comment)
 {
+    uint32_t commentLength = cast(uint32_t) strlen(comment);
+    const StackAddr a = {0};
+    BCGen_emitLongInstSI(self, LongInst_Comment, a, commentLength);
+
+    BCGen_outputBytes(self, comment, commentLength);
 }
 
 static inline void BCGen_Prt(BCGen* self, const BCValue* value, bool isString)
-{
-}
-
-static inline void BCGen_SetHigh(BCGen* self, BCValue *lhs, const BCValue* rhs)
 {
 }
 
@@ -3461,10 +3375,35 @@ static inline void BCGen_Jmp(BCGen* self, BCLabel target)
 
 static inline CndJmpBegin BCGen_beginCndJmp(BCGen* self, const BCValue* cond, bool ifTrue)
 {
+    BCValue newCond;
+    if (cond->vType == BCValueType_Immediate)
+    {
+        newCond = BCGen_pushOntoStack(self, cond);
+        cond = &newCond;
+    }
+
+    CndJmpBegin result = {self->ip, *cond, ifTrue};
+    self->ip += 2;
+    return result;
 }
 
 static inline void BCGen_endCndJmp(BCGen* self, CndJmpBegin jmp, BCLabel target)
 {
+    uint32_t atIp = jmp.at.addr;
+    BCValue* cond = &jmp.cond;
+    bool ifTrue = jmp.ifTrue;
+
+    uint32_t low_word =  (uint32_t)(ifTrue ? LongInst_JmpTrue : LongInst_JmpFalse);
+    uint32_t high_word = target.addr.addr;
+
+
+    if (BCValue_isStackValueOrParameter(cond))
+    {
+        low_word = (ifTrue ? LongInst_JmpNZ : LongInst_JmpZ)
+                   | (cond->stackAddr.addr << 16);
+    }
+
+    BCGen_emit2_at(self, low_word, high_word, atIp);
 }
 
 static inline void BCGen_Throw(BCGen* self, const BCValue* e)
@@ -3539,7 +3478,6 @@ const BackendInterface BCGen_interface = {
     .Comment = (Comment_t) BCGen_Comment,
     .Prt = (Prt_t) BCGen_Prt,
     .Set = (Set_t) BCGen_Set,
-    .SetHigh = (SetHigh_t) BCGen_SetHigh,
     .Ult3 = (Ult3_t) BCGen_Ult3,
     .Ule3 = (Ule3_t) BCGen_Ule3,
     .Lt3 = (Lt3_t) BCGen_Lt3,
