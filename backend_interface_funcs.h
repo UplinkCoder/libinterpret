@@ -90,6 +90,8 @@ typedef void (*new_instance_t) (void ** result_p);
 
 typedef struct BackendInterface
 {
+    const char* name;
+
     const Initialize_t Initialize;
     const InitializeV_t InitializeV;
     const Finalize_t Finalize;

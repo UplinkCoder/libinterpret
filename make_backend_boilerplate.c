@@ -166,6 +166,7 @@ int main(int argc, char* argv[])
         }
     }
     printf("\nconst BackendInterface %s_interface = {\n", argv[1]);
+    printf("    .name = \"%s\",\n\n", argv[1]);
     // .Initialize = (Initialize_t) BCGen_Initialize,
     for(int i = 0; i < n_parsed - 1; i++)
     {

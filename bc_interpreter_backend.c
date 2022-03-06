@@ -3068,20 +3068,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
 #if 0
 {
 
-    BCLabel genLabel()
-    {
-        return BCLabel(ip);
-    }
 
-    void Jmp(BCLabel target)
-    {
-        assert(target.addr);
-        if (ip != target.addr)
-        {
-            auto at = beginJmp();
-            endJmp(at, target);
-        }
-    }
 
     void Prt(BCValue value, bool isString = false)
     {
@@ -3142,55 +3129,6 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         ip += 2;
     }
 +/
-    void IToF32(BCValue result, BCValue rhs)
-    {
-        assert(BCValue_isStackValueOrParameter(&result));
-        assert(BCValue_isStackValueOrParameter(&rhs));
-
-        emitLongInst(LongInst_IToF32, result.stackAddr, rhs.stackAddr);
-    }
-
-    void IToF64(BCValue result, BCValue rhs)
-    {
-        assert(BCValue_isStackValueOrParameter(&result));
-        assert(BCValue_isStackValueOrParameter(&rhs));
-
-        emitLongInst(LongInst_IToF64, result.stackAddr, rhs.stackAddr);
-    }
-
-    void F32ToI(BCValue result, BCValue rhs)
-    {
-        assert(BCValue_isStackValueOrParameter(&result));
-        assert(BCValue_isStackValueOrParameter(&rhs));
-
-        emitLongInst(LongInst_F32ToI, result.stackAddr, rhs.stackAddr);
-    }
-
-    void F64ToI(BCValue result, BCValue rhs)
-    {
-        assert(BCValue_isStackValueOrParameter(&result));
-        assert(BCValue_isStackValueOrParameter(&rhs));
-
-        emitLongInst(LongInst_F64ToI, result.stackAddr, rhs.stackAddr);
-    }
-
-    void F32ToF64(BCValue result, BCValue rhs)
-    {
-        assert(BCValue_isStackValueOrParameter(&result));
-        assert(BCValue_isStackValueOrParameter(&rhs));
-
-        emitLongInst(LongInst_F32ToF64, result.stackAddr, rhs.stackAddr);
-
-    }
-
-    void F64ToF32(BCValue result, BCValue rhs)
-    {
-        assert(BCValue_isStackValueOrParameter(&result));
-        assert(BCValue_isStackValueOrParameter(&rhs));
-
-        emitLongInst(LongInst_F64ToF32, result.stackAddr, rhs.stackAddr);
-    }
-
 
     void Memcmp(BCValue result, BCValue lhs, BCValue rhs)
     {
@@ -3365,10 +3303,18 @@ static inline void BCGen_Call(BCGen* self, BCValue *result, const BCValue* fn, B
 
 static inline BCLabel BCGen_genLabel(BCGen* self)
 {
+    BCLabel result = {self->ip};
+    return result;
 }
 
 static inline void BCGen_Jmp(BCGen* self, BCLabel target)
 {
+    assert(target.addr.addr);
+    if (self->ip != target.addr.addr && self->ip != target.addr.addr - 2)
+    {
+        BCAddr at = {BCGen_beginJmp(self)};
+        BCGen_endJmp(self, at, target);
+    }
 }
 
 static inline CndJmpBegin BCGen_beginCndJmp(BCGen* self, const BCValue* cond, bool ifTrue)
@@ -3453,6 +3399,8 @@ static inline void BCGen_LoadFramePointer(BCGen* self, BCValue *result, const in
 extern "C"
 #endif
 const BackendInterface BCGen_interface = {
+    .name = "Bytecode Interpreter (BCGen)",
+
     .Initialize = (Initialize_t) BCGen_Initialize,
     .InitializeV = (InitializeV_t) BCGen_InitializeV,
     .Finalize = (Finalize_t) BCGen_Finalize,
