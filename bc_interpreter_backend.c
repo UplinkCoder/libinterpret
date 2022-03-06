@@ -154,7 +154,7 @@ typedef enum LongInst
     LongInst_SetImm32,
     LongInst_SetImm8,
 
-    LongInst_LoadFramePointer,
+    LongInst_ContextManip,
     LongInst_Call,
 
 #define HEAP_LOAD_BEGIN LongInst_HeapLoad8
@@ -332,6 +332,50 @@ static inline void BCGen_Init(BCGen* self)
     self->finalized = false;
 }
 
+typedef enum CtxM {
+    CtxM_Undef,
+
+    CtxM_GetFramePointer,
+    CtxM_SetFramePointer,
+
+    CtxM_AddStackPointer,
+    CtxM_SubStackPointer,
+
+    CtxM_max
+} CtxM;
+
+const char* CtxM_toChars(CtxM manip)
+{
+    const char* result =  "Invalid (greater than max)";
+
+    switch(manip)
+    {
+    case CtxM_Undef:
+        result = "Invalid (Undef)";
+    break;
+
+    case CtxM_GetFramePointer :
+        result = "GetFramePointer";
+    break;
+
+    case CtxM_SetFramePointer :
+        result = "SetFramePointer";
+    break;
+
+    case CtxM_AddStackPointer:
+        result = "AddStackPointer";
+    break;
+
+    case CtxM_SubStackPointer:
+        result = "SubStackPointer";
+    break;
+
+    case CtxM_max :
+        result = "Invalid (max)";
+    }
+
+    return result;
+}
 
 void BCGen_new_instance(void** pResult)
 {
@@ -365,7 +409,7 @@ typedef struct ReturnAddr
 #define LOCAL_STACK_SIZE 2048
 
 typedef struct BCInterpreter {
-    long* fp;    
+    long* fp;
     long* sp;
     uint32_t ip;
     
@@ -389,8 +433,6 @@ typedef struct BCInterpreter {
 
 bool BCInterpreter_Return(BCInterpreter* self)
 {
-    uint32_t ip = 0;
-
     if (self->n_return_addrs)
     {
         ReturnAddr returnAddr = self->returnAddrs[--self->n_return_addrs];
@@ -1136,6 +1178,14 @@ void PrintCode(IntIter* iter)
             }
             break;
 
+        case LongInst_ContextManip:
+            {
+                CtxM manip = cast(CtxM)((lw >> 8) & 0xFF);
+                printf("LongInst_ContextManip {%s, R[%u], %d}",
+                       CtxM_toChars(manip), lhsOffset / 4, imm32c);
+            }
+            break;
+
         case LongInst_Alloc:
             {
                 printf("LongInst_Alloc R[%d] = ALLOC(R[%d])\n", lhsOffset / 4, rhsOffset / 4);
@@ -1305,11 +1355,13 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
         int64_t* rhs = &stackP[(rhsOffset / 4)];
         int64_t* opRef = &stackP[(opRefOffset / 4)];
 
-        float flhs;
-        float frhs;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+        float flhs = 0;
+        float frhs = 0;
 
-        double drhs;
-        double dlhs;
+        double drhs = 0;
+        double dlhs = 0;
 
         if ((lw & INSTMASK) >= FLT32_BEGIN && (lw & INSTMASK) <= FLT32_END)
         {
@@ -1324,7 +1376,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             drhs = *(double*)rhs;
         }
 
-        bool cond;
+        bool cond = 0;
 
         if (!lw)
         { // Skip NOPS
@@ -1790,6 +1842,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
                 *(cast(uint64_t*)lhsRef) = *cast(uint64_t*)&dlhs;
             }
             break;
+#pragma GCC diagnostic pop
 
         case LongInst_Assert:
             {
@@ -2445,6 +2498,16 @@ static inline void BCGen_emitLongInstSS(BCGen* self, const LongInst i, const Sta
               , i
               , stackAddrLhs.addr | stackAddrRhs.addr << 16);
 }
+#define uint13_t uint16_t
+#define uint3_t uint8_t
+
+static inline void BCGen_emitLongInstCtxM(BCGen* self, CtxM manip,
+    StackAddr addr, int32_t offset32)
+{
+     BCGen_emit2(self
+              , LongInst_ContextManip | ((uint8_t) manip) << 8 | addr.addr << 16
+              , offset32);
+}
 
 static inline void BCGen_emitLongInstSI(BCGen* self, const LongInst i, const StackAddr stackAddrLhs, uint32_t rhs)
 {
@@ -2502,6 +2565,13 @@ static inline void BCGen_emitLongInstA(BCGen* self, const LongInst i, const BCAd
     BCGen_emit2(SELF \
               , I | OP_ADDR.addr << 16 \
               , LHS_ADDR.addr | RHS_ADDR.addr << 16); \
+}
+
+#define BCGen_emitLongInstCtxM(SELF, CTX_M, ADDR, OFF32) \
+{ \
+    BCGen_emit2(SELF \
+              , LongInst_ContextManip | ((uint8_t)CTX_M) << 8 | ADDR.addr << 16 \
+              , OFF32); \
 }
 
 #define BCGen_emitLongInstA(SELF, T, TARGET_ADDR) \
@@ -2754,7 +2824,7 @@ static inline void BCGen_Set(BCGen* self, BCValue* lhs, const BCValue* rhs)
     }
 }
 
-static inline BCValue BCGen_pushOntoStack(BCGen* self, const BCValue* val)
+static inline BCValue BCGen_pushTemporary(BCGen* self, const BCValue* val)
 {
     if (!BCValue_isStackValueOrParameter(val))
     {
@@ -2785,8 +2855,8 @@ static inline void BCGen_emitArithInstruction(BCGen* self
     assert(inst >= LongInst_Add && inst < LongInst_ImmAdd); //,
 //        "Instruction is not in Range for Arith Instructions");
 
-    BCValueType lhs_type_type = lhsP->type.type;
-    BCValueType rhs_type_type = rhsP->type.type;
+    BCTypeEnum lhs_type_type = lhsP->type.type;
+    BCTypeEnum rhs_type_type = rhsP->type.type;
 
     BCTypeEnum commonType = BCTypeEnum_commonTypeEnum(lhs_type_type, rhs_type_type);
 
@@ -2806,7 +2876,7 @@ static inline void BCGen_emitArithInstruction(BCGen* self
 
     if (lhs_vType == BCValueType_Immediate)
     {
-        lhs = BCGen_pushOntoStack(self, lhsP);
+        lhs = BCGen_pushTemporary(self, lhsP);
         lhsP = &lhs;
     }
 
@@ -2831,7 +2901,7 @@ static inline void BCGen_emitArithInstruction(BCGen* self
         }
         else if (rhs_type_type == BCTypeEnum_f23)
         {
-            rhs = BCGen_pushOntoStack(self, rhsP);
+            rhs = BCGen_pushTemporary(self, rhsP);
             rhsP = &rhs;
         }
         else if (rhs_type_type == BCTypeEnum_f52)
@@ -2859,7 +2929,7 @@ static inline void BCGen_emitArithInstruction(BCGen* self
             rhsP = &rhs;
         }
 
-        rhs = BCGen_pushOntoStack(self, &rhs);
+        rhs = BCGen_pushTemporary(self, &rhs);
         if (inst != LongInst_Set)
         {
             int t = (int)inst;
@@ -2888,7 +2958,7 @@ static inline void BCGen_emitArithInstruction(BCGen* self
         }
         else
         {
-            rhs = BCGen_pushOntoStack(self, rhsP);
+            rhs = BCGen_pushTemporary(self, rhsP);
             rhsP = &rhs;
         }
     }
@@ -2976,13 +3046,13 @@ static inline void BCGen_Load_Store(BCGen* self, BCValue *to, const BCValue* fro
 
     if (!BCValue_isStackValueOrParameter(from))
     {
-        newFrom = BCGen_pushOntoStack(self, from);
+        newFrom = BCGen_pushTemporary(self, from);
         from = &newFrom;
     }
 
     if (!BCValue_isStackValueOrParameter(to))
     {
-        newTo = BCGen_pushOntoStack(self, to);
+        newTo = BCGen_pushTemporary(self, to);
         to = &newTo;
     }
 
@@ -3009,9 +3079,9 @@ BC_LOAD_FUNC(64)
 
 static inline void BCGen_MemCpy(BCGen* self, BCValue *dst, const BCValue* src, const BCValue* size)
 {
-    BCValue newSize = BCGen_pushOntoStack(self, size);
-    BCValue newSrc = BCGen_pushOntoStack(self, src);
-    BCValue newDst = BCGen_pushOntoStack(self, dst);
+    BCValue newSize = BCGen_pushTemporary(self, size);
+    BCValue newSrc = BCGen_pushTemporary(self, src);
+    BCValue newDst = BCGen_pushTemporary(self, dst);
 
     BCGen_emitLongInstSSS(self, LongInst_MemCpy, newSize.stackAddr, newSrc.stackAddr, newDst.stackAddr);
 }
@@ -3019,7 +3089,7 @@ static inline void BCGen_MemCpy(BCGen* self, BCValue *dst, const BCValue* src, c
 static inline void BCGen_Ret(BCGen* self, const BCValue* val)
 {
     LongInst inst = ((BCTypeEnum_basicTypeSize(val->type.type) == 8) ? LongInst_Ret64 : LongInst_Ret32);
-    BCValue newval = BCGen_pushOntoStack(self, val);
+    BCValue newval = BCGen_pushTemporary(self, val);
 
     if (BCValue_isStackValueOrParameter(val))
     {
@@ -3073,7 +3143,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     void Prt(BCValue value, bool isString = false)
     {
         if (value.vType == BCValueType_Immediate)
-            value = BCGen_pushOntoStack(self, value);
+            value = BCGen_pushTemporary(self, value);
 
         byteCodeArray[ip] = ShortInst16Ex(LongInst_PrintValue, isString, value.stackAddr);
         byteCodeArray[ip + 1] = 0;
@@ -3083,7 +3153,7 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
     
     void Call(BCValue result, BCValue fn, BCValue[] args)
     {
-        auto call_id = BCGen_pushOntoStack(imm32(callCount + 1)).stackAddr;
+        auto call_id = BCGen_pushTemporary(imm32(callCount + 1)).stackAddr;
         calls[callCount++] = RetainedCall(fn, args, functionIdx, ip, sp);
         emitLongInst(LongInst_Call, result.stackAddr, call_id);
 
@@ -3137,11 +3207,11 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
             "The result for this must be Empty or a StackValue not: " ~ enumToString(result.vType));
         if (lhs.vType == BCValueType_Immediate)
         {
-            lhs = BCGen_pushOntoStack(lhs);
+            lhs = BCGen_pushTemporary(lhs);
         }
         if (rhs.vType == BCValueType_Immediate)
         {
-            rhs = BCGen_pushOntoStack(rhs);
+            rhs = BCGen_pushTemporary(rhs);
         }
         assert(BCValue_isStackValueOrParameter(&lhs),
             "The lhs of Memcmp is not a StackValue " ~ enumToString(rhs.vType));
@@ -3162,8 +3232,8 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
 
         assert(BCValue_isStackValueOrParameter(&result));
 
-        lhs = BCGen_pushOntoStack(lhs);
-        rhs = BCGen_pushOntoStack(rhs);
+        lhs = BCGen_pushTemporary(lhs);
+        rhs = BCGen_pushTemporary(rhs);
         emitLongInst(LongInst_Realloc, result.stackAddr, lhs.stackAddr, rhs.stackAddr);
         // Hack! we have no overload to store additional information in the 8 bit
         // after the inst so just dump it in there let's hope we don't overwrite
@@ -3189,7 +3259,7 @@ static inline void BCGen_Alloc(BCGen* self, BCValue *heapPtr, const BCValue* siz
 
     if (size->vType == BCValueType_Immediate)
     {
-        newSize = BCGen_pushOntoStack(self, size);
+        newSize = BCGen_pushTemporary(self, size);
         size = &newSize;
     }
 
@@ -3208,7 +3278,7 @@ static inline void BCGen_Assert(BCGen* self, const BCValue* value, const BCValue
 
     assert(BCValue_isStackValueOrParameter(value));
     {
-        BCGen_emitLongInstSI(self, LongInst_Assert, BCGen_pushOntoStack(self, value).stackAddr, err->imm32.imm32);
+        BCGen_emitLongInstSI(self, LongInst_Assert, BCGen_pushTemporary(self, value).stackAddr, err->imm32.imm32);
     }
 }
 
@@ -3290,7 +3360,7 @@ static inline void BCGen_Not(BCGen* self, BCValue *result, const BCValue* val)
     }
     else if (val->vType == BCValueType_Immediate)
     {
-        newVal = BCGen_pushOntoStack(self, val);
+        newVal = BCGen_pushTemporary(self, val);
         val = &newVal;
     }
 
@@ -3322,7 +3392,7 @@ static inline CndJmpBegin BCGen_beginCndJmp(BCGen* self, const BCValue* cond, bo
     BCValue newCond;
     if (cond->vType == BCValueType_Immediate)
     {
-        newCond = BCGen_pushOntoStack(self, cond);
+        newCond = BCGen_pushTemporary(self, cond);
         cond = &newCond;
     }
 
@@ -3392,7 +3462,7 @@ static inline void BCGen_Realloc(BCGen* self, BCValue *result, const BCValue* lh
 static inline void BCGen_LoadFramePointer(BCGen* self, BCValue *result, const int32_t offset)
 {
     assert(BCValue_isStackValueOrParameter(result));
-    BCGen_emitLongInstSI(self, LongInst_LoadFramePointer, result->stackAddr, offset);
+    BCGen_emitLongInstCtxM(self, CtxM_GetFramePointer, result->stackAddr, offset);
 }
 
 #ifdef __cplusplus
@@ -3402,6 +3472,7 @@ const BackendInterface BCGen_interface = {
     .name = "Bytecode Interpreter (BCGen)",
 
     .Initialize = (Initialize_t) BCGen_Initialize,
+
     .InitializeV = (InitializeV_t) BCGen_InitializeV,
     .Finalize = (Finalize_t) BCGen_Finalize,
     .beginFunction = (beginFunction_t) BCGen_beginFunction,
