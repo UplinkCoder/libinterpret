@@ -492,25 +492,21 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_ImmAdd R[%d] += %d\n", opRefOffset / 4, imm32c);
             }
             break;
-
         case LongInst_ImmSub:
             {
                 printf("LongInst_ImmSub R[%d] -= %d\n", opRefOffset / 4, imm32c);
             }
             break;
-
         case LongInst_ImmMul:
             {
                 printf("LongInst_ImmMul R[%d] *= %d\n", opRefOffset / 4, imm32c);
             }
             break;
-
         case LongInst_ImmDiv:
             {
                 printf("LongInst_ImmDiv R[%d] /= %d\n", opRefOffset / 4, imm32c);
             }
             break;
-
         case LongInst_ImmUdiv:
             {
                 printf("LongInst_ImmUdiv R[%d] /= %d\n", opRefOffset / 4, imm32c);
@@ -542,7 +538,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_ImmXor32 R[%d] ^= %u\n", opRefOffset / 4, hi);
             }
             break;
-
         case LongInst_ImmLsh:
             {
                 printf("LongInst_ImmLsh R[%d] <<= %u\n", opRefOffset / 4, hi);
@@ -553,7 +548,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_ImmRsh R[%d] >>= %u\n", opRefOffset / 4, hi);
             }
             break;
-
         case LongInst_ImmMod:
             {
                 printf("LongInst_ImmMod R[%d] %%= %d\n", opRefOffset / 4, imm32c);
@@ -564,7 +558,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_ImmUmod R[%d] %%= %u\n", opRefOffset / 4, hi);
             }
             break;
-
         case LongInst_SetImm8:
             {
                 printf("LongInst_SetImm8 R[%d] = %u\n", opRefOffset / 4, hi);
@@ -591,7 +584,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_ImmNeq R[%d] != %d", opRefOffset / 4, imm32c);
             }
             break;
-
         case LongInst_ImmUlt:
             {
                 printf("LongInst_ImmUlt R[%d] < %u\n", opRefOffset / 4, hi);
@@ -612,7 +604,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_ImmUge R[%d] >= %u\n", opRefOffset / 4, hi);
             }
             break;
-
         case LongInst_ImmLt:
             {
                 printf("LongInst_ImmLt R[%d] < %d\n", opRefOffset / 4, imm32c);
@@ -633,7 +624,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_ImmGe R[%d] >= %d\n", opRefOffset / 4, imm32c);
             }
             break;
-
         case LongInst_Add:
             {
                 printf("LongInst_Add R[%d] += R[%d]\n", lhsOffset / 4, rhsOffset / 4);
@@ -684,7 +674,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_Xor R[%d] ^= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
-
         case LongInst_Lsh:
             {
                 printf("LongInst_Lsh R[%d] <<= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
@@ -806,7 +795,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_FGe64 R[%d] >= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
-
         case LongInst_F64ToF32 :
             {
                 printf("LongInst_F64ToF32 R[%d] = cast(float) R[%d]\n", lhsOffset / 4, rhsOffset / 4);
@@ -822,7 +810,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_IToF64 R[%d] = cast(double) R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
-
         case LongInst_FAdd64:
             {
                 printf("LongInst_FAdd64 R[%d] == R[%d]\n", lhsOffset / 4, rhsOffset / 4);
@@ -848,7 +835,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_FMod64 R[%d] %%= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
-
         case LongInst_Assert:
             {
                 printf("LongInst_Assert(R[%d])\n", opRefOffset / 4);
@@ -865,7 +851,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_Neq R[%d] == R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
-
         case LongInst_Set:
             {
                 printf("LongInst_Set R[%d] = R[%d]\n", lhsOffset / 4, rhsOffset / 4);
@@ -892,7 +877,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_Uge R[%d] >= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
-
         case LongInst_Lt:
             {
                 printf("LongInst_Neq R[%d] < R[%d]\n", lhsOffset / 4, rhsOffset / 4);
@@ -973,7 +957,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_JmpTrue\n :%u\n", hi);
             }
             break;
-
         case LongInst_HeapLoad8:
             {
                 printf("LongInst_HeapLoad8 R[%d] = HEAP[%d]\n", lhsOffset / 4, rhsOffset);
@@ -984,20 +967,17 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_HeapStore8 HEAP[%d] = R[%d]\n", lhsOffset, rhsOffset / 4);
             }
             break;
-
-            case LongInst_HeapLoad16:
+        case LongInst_HeapLoad16:
             {
                 printf("LongInst_HeapLoad16 R[%d] = HEAP[%d]\n", lhsOffset / 4, rhsOffset);
-
             }
             break;
-            case LongInst_HeapStore16:
+        case LongInst_HeapStore16:
             {
                 printf("LongInst_HeapStore16 HEAP[%d] = R[%d]\n", lhsOffset, rhsOffset / 4);
             }
             break;
-
-            case LongInst_HeapLoad32:
+        case LongInst_HeapLoad32:
             {
                 printf("LongInst_HeapLoad32 R[%d] = HEAP[%d]\n", lhsOffset / 4, rhsOffset);
             }
@@ -1007,19 +987,16 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_HeapStore32 HEAP[%d] = R[%d]\n", lhsOffset, rhsOffset / 4);
             }
             break;
-
         case LongInst_HeapLoad64:
             {
                  printf("LongInst_HeapLoad64 R[%d] = HEAP[%d]\n", lhsOffset / 4, rhsOffset);
-           }
+            }
             break;
-
         case LongInst_HeapStore64:
             {
                 printf("LongInst_HeapStore64 HEAP[%d] = R[%d]\n", lhsOffset, rhsOffset / 4);
             }
             break;
-
         case LongInst_Ret32:
             {
                 printf("LongInst_Ret32 R[%d]\n", opRefOffset / 4);
@@ -1035,7 +1012,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_RetS64 R[%d]\n", opRefOffset / 4);
             }
             break;
-
         case LongInst_Ret64:
             {
                 printf("LongInst_Ret64 R[%d]\n", opRefOffset / 4);
@@ -1075,16 +1051,16 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_Flg R[%d]\n", opRefOffset / 4);
             }
             break;
-
         case LongInst_BuiltinCall:
             {
                 printf("LongInst_BuiltinCall\n");
                 assert(0);//, "Unsupported right now: BCBuiltin");
             }
-#if 0
+            break;
         case LongInst_Realloc:
             {
                 printf("LongInst_Realloc\n");
+#if 0
                 if (*rhs == 0 && *lhsRef == 0)
                 {
                     *opRef = 0;
@@ -1163,7 +1139,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_Call R[%d] = ?\n", (opRefOffset / 4));
             }
             break;
-
         case LongInst_ContextManip:
             {
                 CtxM manip = cast(CtxM)((lw >> 8) & 0xFF);
@@ -1171,7 +1146,6 @@ void PrintCode(IntIter* iter)
                        CtxM_toChars(manip), lhsOffset / 4, imm32c);
             }
             break;
-
         case LongInst_Alloc:
             {
                 printf("LongInst_Alloc R[%d] = ALLOC(R[%d])\n", lhsOffset / 4, rhsOffset / 4);
@@ -1201,7 +1175,6 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_File \n");
             }
             break;
-
         case LongInst_Line :
             {
                 printf("LongInst_Line \n");
@@ -1242,7 +1215,9 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 
     uint32_t* codeP = self->byteCodeArray;
     if (self->byteCodeCount > ARRAY_SIZE(self->byteCodeArray))
-            codeP = self->byteCodeArrayExtra;
+    {
+        codeP = self->byteCodeArrayExtra;
+    }
 
     {
         int argOffset = 1;
@@ -1303,7 +1278,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 
     int cond = 0;
 
-    while (true)
+    for (;;)
     {
         const uint32_t lw = (codeP)[state.ip];
         const uint32_t hi = (codeP)[state.ip + 1];

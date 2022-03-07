@@ -260,7 +260,7 @@ static inline bool isStackAddress(uint32_t unrealPointer)
     return (unrealPointer & stackAddrMask) == stackAddrMask;
 }
 
-static bool isHeapAddress(uint32_t unrealPointer)
+static inline bool isHeapAddress(uint32_t unrealPointer)
 {
     // a heap address does not have the upper 3 bits set
     return (unrealPointer & stackAddrMask) != stackAddrMask;
