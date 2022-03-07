@@ -19,9 +19,8 @@
     ((size_t)((char *)&((st *)0)->m - (char *)0))
 
 #define CONSTEXPR
-typedef const char* cstring;
 
-cstring BCTypeEnum_toChars(BCTypeEnum* self)
+const char*  BCTypeEnum_toChars(const BCTypeEnum* self)
 {
     switch(*self)
     {

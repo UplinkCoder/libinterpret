@@ -91,7 +91,7 @@ typedef enum BCTypeEnum
     BCTypeEnum_Slice,
 } BCTypeEnum;
 
-EXTERN_C const char* BCTypeEnum_toChars(BCTypeEnum* self);
+EXTERN_C const char* BCTypeEnum_toChars(const BCTypeEnum* self);
 
 typedef struct BCAddr
 {
