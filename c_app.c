@@ -42,14 +42,12 @@ int main(int argc, char* argv[])
         {
             // TODO i.returnTypeAnnotation(c, BCType_i32);
 
-            BCValue a = i.genParameter(c, BCType_i32, "a");
+            BCValue a = i.genParameter(c, (BCType){BCTypeEnum_i32}, "a");
             BCValue b = i.genParameter(c, BCType_i32, "b");
 
-            BCValue res = i.genLocal(c, BCType_i32, "result");
+            BCValue res = i.genLocal(c, (BCType){BCTypeEnum_i32}, "result");
 
             i.Add3(c, &res, &a, &b);
-            i.Mul3(c, &res, &res, &b);
-
             i.Ret(c, &res);
 
             i.endFunction(c, fIdx);
