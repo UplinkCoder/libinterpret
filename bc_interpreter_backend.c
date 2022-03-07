@@ -2347,7 +2347,7 @@ L_LongInst_Comment:
 #if 0
         case LongInst_Memcmp:
             {
-                cond = 1;
+                cond = 0;
 
                 uint32_t size = cast(uint32_t) *opRef;
                 uint32_t _lhs = cast(uint32_t) *lhsRef;
@@ -2356,7 +2356,7 @@ L_LongInst_Comment:
                 assert(_lhs && _rhs, "trying to deref nullPointers");
                 if (_lhs == _rhs)
                 {
-                    cond = 0;
+                    cond = 1;
                 }
                 else
                 {
@@ -2371,7 +2371,10 @@ L_LongInst_Comment:
                         if (lhsC == rhsC)
                             continue;
                         else
+                        {
                             cond = ((lhsC > rhsC) ? 1 : -1);
+                            break;
+                        }
                     }
                 }
             }
