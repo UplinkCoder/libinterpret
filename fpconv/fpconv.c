@@ -1,5 +1,4 @@
-#include <stdbool.h>
-#include <string.h>
+#include <stdint.h>
 
 #include "fpconv.h"
 #include "powers.h"
@@ -12,6 +11,14 @@
 
 #define absv(n) ((n) < 0 ? -(n) : (n))
 #define minv(a, b) ((a) < (b) ? (a) : (b))
+
+#define memcpy(DST, SRC, SIZE) \
+    for(int i = 0; i < (SIZE); i++) \
+        *(((uint8_t*)(DST)) + i) = *(((uint8_t*)(SRC)) + i);
+
+#define memset(DST, V, SIZE) \
+    for(int i = 0; i < (SIZE); i++) \
+        *((uint8_t*)(DST) + i) = (uint8_t)(V);
 
 static uint64_t tens[] = {
     10000000000000000000U, 1000000000000000000U, 100000000000000000U,
@@ -160,7 +167,7 @@ static int generate_digits(Fp* fp, Fp* upper, Fp* lower, char* digits, int* K)
     /* 10 */
     uint64_t* unit = tens + 18;
 
-    while(true) {
+    for(;;) {
         part2 *= 10;
         delta *= 10;
         kappa--;
@@ -330,3 +337,5 @@ int fpconv_dtoa(double d, char dest[24])
 
     return str_len;
 }
+
+#undef memcpy
