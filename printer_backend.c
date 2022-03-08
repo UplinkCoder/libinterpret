@@ -799,7 +799,7 @@ static inline BCLabel Printer_genLabel(Printer* self)
     {
 
         Printer_PrintLabel(self, &result);
-        Printer_PutStr(self, " = genLabel()");
+        Printer_PutStr(self, " = genLabel();");
         Printer_PutNewline(self);
         self->LastLabel = self->vIp;
     }

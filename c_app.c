@@ -35,6 +35,7 @@ int main(int argc, char* argv[])
     i.new_instance(&c);
 
     uint32_t fIdx;
+    uint32_t add_idx;
 
     i.Initialize(c, 0); // zero extra arguments
     {
@@ -46,13 +47,35 @@ int main(int argc, char* argv[])
             BCValue b = i.genParameter(c, BCType_i32, "b");
 
             BCValue res = i.genLocal(c, (BCType){BCTypeEnum_i32}, "result");
+            BCValue res2 = i.genLocal(c, (BCType){BCTypeEnum_i32}, "res2");
 
             i.Add3(c, &res, &a, &b);
+            i.Eq3(c, &res2, &a, &b);
+            i.Eq3(c, 0, &a, &res);
             i.Ret(c, &res);
 
             i.endFunction(c, fIdx);
         }
+
+        add_idx = i.beginFunction(c, 1, "add");
+        {
+            BCValue a = i.genParameter(c, (BCType){BCTypeEnum_i32, 0}, "a");
+            BCValue b = i.genParameter(c, (BCType){BCTypeEnum_i32, 0}, "b");
+
+            BCValue result = i.genLocal(c, (BCType){BCTypeEnum_i32, 0}, "result");
+            BCValue l1 = imm32(64);
+
+            i.Eq3(c, 0, &a, &l1);
+            CndJmpBegin cndJmp2 = i.beginCndJmp(c, 0, false);
+            i.Add3(c, &result, &a, &b);
+            BCLabel label6 = i.genLabel(c);
+            i.endCndJmp(c, &cndJmp2, label6);
+            i.Ret(c, &result);
+        }
+        i.endFunction(c, add_idx);
+
     }
+
     i.Finalize(c);
 
     {
@@ -64,10 +87,24 @@ int main(int argc, char* argv[])
         arguments[0] = imm32(a);
         arguments[1] = imm32(b);
 
-        BCValue res = i.run(c, fIdx, arguments, 2);
+        BCValue res = i.run(c, add_idx, arguments, 2);
 
         printf("%d + %d = %d\n", a, b, res.imm32.imm32);
     }
+
+    BCGen* g = c;
+    char textBuffer[8192];
+    char* p = textBuffer;
+    // yeah I know it's stupid to first convert to text and then disassemble the text
+    // but meh ...
+    for(int i = 0; i < g->byteCodeCount; i++)
+    {
+        p += sprintf(p, "%d ", g->byteCodeArray[i]);
+    }
+
+    IntIter it;
+    IntIter_FromBuffer(&it, textBuffer, p - textBuffer);
+    PrintCode(it);    
 
     i.destroy_instance(c);
 

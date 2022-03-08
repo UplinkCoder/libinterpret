@@ -1165,7 +1165,7 @@ void PrintCode(IntIter* iter)
             break;
         case LongInst_Memcmp:
             {
-                printf("LongInst_MemCmp (lhs: R[%d], rhs: R[%d], size: R[%d])\n"
+                printf("LongInst_MemCmp (lhs: R[%d], rhs: R[%d], size: R[%d])\n",
                     lhsOffset / 4, rhsOffset / 4, opRefOffset / 4,
                 );
             }
@@ -1202,7 +1202,20 @@ void PrintCode(IntIter* iter)
         }
     }
 }
-#endif
+#endif // DIS
+
+#undef DIS
+static inline uint8_t* BCInterpreter_toRealPointer(const BCInterpreter* self, const BCHeap* heapPtr, uint32_t unrealAddress)
+{
+    uint8_t* result = heapPtr->heapData + unrealAddress;
+
+    if (isStackAddress(unrealAddress))
+    {
+        assert((unrealAddress & 3) == 0);
+        result = (uint8_t*) (self->fp + toStackOffset(unrealAddress / 4));
+    }
+    return result;
+}
 
 BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_args, BCHeap* heapPtr)
 {
@@ -2319,7 +2332,7 @@ L_LongInst_Comment:
                 state.ip += align4(hi) / 4;
             }
             break;
-#if 0
+#if 1
         case LongInst_Memcmp:
             {
                 cond = 0;
@@ -2328,15 +2341,15 @@ L_LongInst_Comment:
                 uint32_t _lhs = cast(uint32_t) *lhsRef;
                 uint32_t _rhs = cast(uint32_t) *rhs;
 
-                assert(_lhs && _rhs, "trying to deref nullPointers");
+                assert(_lhs && _rhs);//, "trying to deref nullPointers");
                 if (_lhs == _rhs)
                 {
                     cond = 1;
                 }
                 else
                 {
-                    uint8_t* lhsP = BCGen_toRealPointer(self, _lhs);
-                    uint8_t* rhsP = BCGen_toRealPointer(self, _rhs;)
+                    uint8_t* lhsP = BCInterpreter_toRealPointer(&state, heapPtr, _lhs);
+                    uint8_t* rhsP = BCInterpreter_toRealPointer(&state, heapPtr, _rhs);
 
                     for(int i = 0; i < size; i++)
                     {
@@ -2935,12 +2948,12 @@ static inline void BCGen_emitFlag(BCGen* self, BCValue* lhs)
 
 static inline void BCGen_Cmp(BCGen* self, BCValue *result, const BCValue *lhs, const BCValue *rhs, LongInst cmp)
 {
-    assert(result->vType == BCValueType_Unknown
+    assert(!result
         || BCValue_isStackValueOrParameter(result));
 
     BCGen_emitArithInstruction(self, cmp, lhs, rhs, 0);
 
-    if (result->vType != BCValueType_Unknown)
+    if (result)
     {
         BCGen_emitFlag(self, result);
     }
@@ -3377,7 +3390,8 @@ static inline void BCGen_Jmp(BCGen* self, BCLabel target)
 
 static inline CndJmpBegin BCGen_beginCndJmp(BCGen* self, const BCValue* cond, bool ifTrue)
 {
-    assert(cond->vType != BCValueType_Immediate);
+    assert(!cond ||
+           cond->vType != BCValueType_Immediate);
 
     CndJmpBegin result = {{self->ip}, cond, ifTrue};
     self->ip += 2;
@@ -3393,8 +3407,9 @@ static inline void BCGen_endCndJmp(BCGen* self, CndJmpBegin jmp, BCLabel target)
     uint32_t low_word =  (uint32_t)(ifTrue ? LongInst_JmpTrue : LongInst_JmpFalse);
     uint32_t high_word = target.addr.addr;
 
-    if (BCValue_isStackValueOrParameter(cond))
+    if (cond)
     {
+        assert(BCValue_isStackValueOrParameter(cond));
         low_word = (ifTrue ? LongInst_JmpNZ : LongInst_JmpZ)
                    | (cond->stackAddr.addr << 16);
     }
