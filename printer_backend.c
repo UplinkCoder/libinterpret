@@ -30,7 +30,8 @@ typedef struct Printer
 
     uint32_t NumberOfFunctions;
     uint32_t NumberOfParameters;
-    char* functionSuffix;
+    uint32_t LastLabel;
+    char* functionName;
 } Printer;
 
 #ifdef _WIN32
@@ -87,7 +88,7 @@ static inline void Printer_PutStr(Printer* self, const char* str)
 
     if (UNLIKELY(!self->LineIndented))
     {
-        Printer_PutNewlineIndent(self);
+        Printer_PutIndent(self);
         Printer_EnsureCapacity(self, 128);
     }
     char c;
@@ -340,7 +341,6 @@ static inline void Printer_PrintBCValue(Printer* self, const BCValue* val)
             {
                 Printer_PutStr(self,"tmp");
                 Printer_PutU32(self, val->temporaryIndex);
-                Printer_PutStr(self, self->functionSuffix);
             }
             else
             {
@@ -437,7 +437,14 @@ static inline void Printer_Op3(Printer* self,
     Printer_PutStr(self, inst);
     Printer_PutChar(self, '(');
 
-    Printer_PrintBCValue(self, result);
+    if (result)
+    {
+        Printer_PrintBCValue(self, result);
+    }
+    else
+    {
+        Printer_PutChar(self, '0');
+    }
     Printer_PutStr(self, ", ");
 
     Printer_PrintBCValue(self, lhs);
@@ -536,6 +543,10 @@ PR_OP2(Load64)
 
 static inline void Printer_Initialize(Printer* self, uint32_t n_args, ...)
 {
+    Printer_PutStr(self, "Initialize(");
+    Printer_PutU32(self, n_args);
+    Printer_PutStr(self, ", ...);");
+    Printer_PutNewline(self);
 }
 
 static inline void Printer_InitializeV(Printer* self, uint32_t n_args, va_list args)
@@ -544,27 +555,35 @@ static inline void Printer_InitializeV(Printer* self, uint32_t n_args, va_list a
 
 static inline void Printer_Finalize(Printer* self)
 {
+    Printer_PutStr(self, "Finalize()");
+    Printer_PutNewline(self);
 }
 
-static inline uint32_t Printer_beginFunction(Printer* self, uint32_t fnId, const char* name, const void* fn)
+static inline uint32_t Printer_beginFunction(Printer* self, uint32_t fnIdx, const char* name)
 {
-    if (!fnId)
-        fnId = ++self->NumberOfFunctions;
+    if (!fnIdx)
+        fnIdx = ++self->NumberOfFunctions;
 
+    self->functionName = (char*)name;
     Printer_PutStr(self, "uint32_t ");
-    Printer_PutStr(self, name);
+    if (name)
+    {
+        Printer_PutStr(self, name);
+    }
+    else
+    {
+        Printer_PutStr(self, "f");
+        Printer_PutU32(self, fnIdx);
+    }
     Printer_PutStr(self, "_idx = ");
     Printer_PutStr(self, "beginFunction(");
-    Printer_PutU32(self, fnId);
+    Printer_PutU32(self, fnIdx);
 
     Printer_PutStr(self, ", ");
     if (name)
         Printer_PutQuotedStr(self, name);
     else
         Printer_PutChar(self, '0');
-    Printer_PutStr(self, ", ");
-
-    Printer_PutHex(self, cast(uint64_t) fn);
     Printer_PutChar(self, ')');
 
     Printer_PutNewline(self);
@@ -573,7 +592,7 @@ static inline uint32_t Printer_beginFunction(Printer* self, uint32_t fnId, const
     Printer_IncreaseIndent(self);
     Printer_PutNewline(self);
 
-    return fnId;
+    return fnIdx;
 }
 
 static inline void Printer_endFunction(Printer* self, uint32_t fnIdx)
@@ -587,7 +606,17 @@ static inline void Printer_endFunction(Printer* self, uint32_t fnIdx)
     self->NumberOfParameters = 0;
 
     Printer_PutStr(self, "endFunction(");
-    Printer_PutU32(self, fnIdx);
+    if (self->functionName)
+    {
+        Printer_PutStr(self, self->functionName);
+        Printer_PutStr(self, "_idx");
+    }
+    else
+    {
+        Printer_PutStr(self, "f");
+        Printer_PutU32(self, fnIdx);
+    }
+
     Printer_PutStr(self, ");");
 
     Printer_PutNewline(self);
@@ -725,8 +754,8 @@ static inline void Printer_LoadFramePointer(Printer* self, BCValue *result, cons
     Printer_PutStr(self, ", ");
     Printer_PutI32(self, offset);
     Printer_PutStr(self, ");");
-    Printer_PutNewline(self);
 
+    Printer_PutNewline(self);
 }
 
 static inline void Printer_Call(Printer* self, BCValue *result, const BCValue* fn, const BCValue* args, uint32_t n_args)
@@ -757,13 +786,23 @@ static inline void Printer_Call(Printer* self, BCValue *result, const BCValue* f
     Printer_PutNewline(self);
 }
 
+static inline void Printer_PrintLabel(Printer* self, const BCLabel* label)
+{
+    Printer_PutStr(self, "label");
+    Printer_PutU32(self, label->addr.addr);
+}
+
 static inline BCLabel Printer_genLabel(Printer* self)
 {
     BCLabel result = {{self->vIp}};
+    if (self->LastLabel != self->vIp)
+    {
 
-    Printer_PutStr(self, "genLabel()");
-    Printer_PutNewline(self);
-
+        Printer_PrintLabel(self, &result);
+        Printer_PutStr(self, " = genLabel()");
+        Printer_PutNewline(self);
+        self->LastLabel = self->vIp;
+    }
     return result;
 }
 
@@ -779,12 +818,6 @@ static inline BCAddr Printer_beginJmp(Printer* self)
     Printer_PutNewline(self);
 
     return result;
-}
-
-static inline void Printer_PrintLabel(Printer* self, const BCLabel* label)
-{
-    Printer_PutStr(self, "label");
-    Printer_PutU32(self, label->addr.addr);
 }
 
 static inline void Printer_Jmp(Printer* self, BCLabel target)
@@ -816,7 +849,8 @@ static inline void Printer_PrintCndJmp(Printer* self, const CndJmpBegin* jmp)
 
 static inline CndJmpBegin Printer_beginCndJmp(Printer* self, const BCValue* cond, _Bool ifTrue)
 {
-    CndJmpBegin result = {.at = {self->vIp}, .cond = *cond, .ifTrue = ifTrue};
+    CndJmpBegin result =
+        {.at = {self->vIp}, .cond = cond, .ifTrue = ifTrue};
 
     Printer_PutStr(self, "CndJmpBegin ");
     Printer_PrintCndJmp(self, &result);
@@ -824,7 +858,10 @@ static inline CndJmpBegin Printer_beginCndJmp(Printer* self, const BCValue* cond
 
     Printer_PutStr(self, " = beginCndJmp(");
 
-    Printer_PrintBCValue(self, cond);
+    if (cond)
+        Printer_PrintBCValue(self, cond);
+    else
+        Printer_PutChar(self, '0');
     Printer_PutStr(self, ", ");
 
     Printer_PutBool(self, ifTrue);
@@ -891,6 +928,9 @@ static inline void Printer_new_instance(Printer** resultP)
 }
 
 
+#ifdef __cplusplus
+extern "C"
+#endif
 const BackendInterface Printer_interface = {
     .name = "Printer",
 

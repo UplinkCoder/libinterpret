@@ -242,7 +242,7 @@ const char* BCValueType_toChars(const BCValueType* vTypePtr)
 static inline uint32_t BCValue_toU32(const BCValue* self)
 {
     uint32_t result;
- 
+
     switch (self->vType)
     {
         case BCValueType_Parameter :
@@ -276,7 +276,7 @@ static inline uint32_t BCValue_toU32(const BCValue* self)
         const char* result = "vType: ";
 /*
         result ~= enumToString(vType);
-        result ~= "\tType: "; 
+        result ~= "\tType: ";
         result ~= type.toString;
         result ~= "\n\tValue: ";
         result ~= valueToString;

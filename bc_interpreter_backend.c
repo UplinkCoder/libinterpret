@@ -1166,7 +1166,7 @@ void PrintCode(IntIter* iter)
         case LongInst_Memcmp:
             {
                 printf("LongInst_MemCmp (lhs: R[%d], rhs: R[%d], size: R[%d])\n"
-                    lhsOffset / 4, rhsOffset / 4, opRefOffset / 4, 
+                    lhsOffset / 4, rhsOffset / 4, opRefOffset / 4,
                 );
             }
             break;
@@ -2549,6 +2549,7 @@ void BCGen_destroyTemporary(BCGen* self, BCValue* tmp)
 {
     assert(BCValue_isStackValueOrParameter(tmp));//, "tmporary has to be stack-value");
     uint32_t sz;
+
     if (BCType_isBasicBCType(tmp->type))
     {
         sz = align4(BCTypeEnum_basicTypeSize(tmp->type.type));
@@ -2557,6 +2558,7 @@ void BCGen_destroyTemporary(BCGen* self, BCValue* tmp)
     {
         sz = 4;
     }
+
     if (self->sp - sz == tmp->stackAddr.addr)
     {
         // this is the last thing we pushed on
@@ -2801,6 +2803,7 @@ static inline void BCGen_emitArithInstruction(BCGen* self
     BCTypeEnum rhs_type_type = rhsP->type.type;
 
     BCTypeEnum commonType = BCTypeEnum_commonTypeEnum(lhs_type_type, rhs_type_type);
+    _Bool pushedLhs = 0, pushedRhs = 0;
 
     // FIXME Implement utf8 <-> utf32 conversion
     assert(commonType == BCTypeEnum_i32 || commonType == BCTypeEnum_i64
@@ -2819,6 +2822,7 @@ static inline void BCGen_emitArithInstruction(BCGen* self
     if (lhs_vType == BCValueType_Immediate)
     {
         lhs = BCGen_pushTemporary(self, lhsP);
+        pushedLhs |= 1;
         lhsP = &lhs;
     }
 
@@ -2844,6 +2848,7 @@ static inline void BCGen_emitArithInstruction(BCGen* self
         else if (rhs_type_type == BCTypeEnum_f23)
         {
             rhs = BCGen_pushTemporary(self, rhsP);
+            pushedRhs |= true;
             rhsP = &rhs;
         }
         else if (rhs_type_type == BCTypeEnum_f52)
@@ -2896,11 +2901,12 @@ static inline void BCGen_emitArithInstruction(BCGen* self
                 inst = LongInst_SetImm32;
             }
             BCGen_emitLongInstSI(self, inst, lhsP->stackAddr, rhsP->imm32.imm32);
-            return ;
+            goto Lreturn;
         }
         else
         {
             rhs = BCGen_pushTemporary(self, rhsP);
+            pushedRhs |= true;
             rhsP = &rhs;
         }
     }
@@ -2913,6 +2919,12 @@ static inline void BCGen_emitArithInstruction(BCGen* self
     {
         assert(0);//, "Cannot handle: " ~ enumToString(rhs.vType));
     }
+Lreturn:
+    if (pushedRhs)
+        BCGen_destroyTemporary(self, cast(BCValue*)rhsP);
+
+    if (pushedLhs)
+        BCGen_destroyTemporary(self, cast(BCValue*)lhsP);
 }
 
 static inline void BCGen_emitFlag(BCGen* self, BCValue* lhs)
@@ -2983,22 +2995,29 @@ BC_ARITH_FUNC(And)
 
 static inline void BCGen_Load_Store(BCGen* self, BCValue *to, const BCValue* from, LongInst inst)
 {
-    BCValue newTo;
-    BCValue newFrom;
+    _Bool pushedFrom = 0;
+    _Bool pushedTo = 0;
+    BCValue fromV;
+    BCValue toV;
 
     if (!BCValue_isStackValueOrParameter(from))
     {
-        newFrom = BCGen_pushTemporary(self, from);
-        from = &newFrom;
+        pushedFrom |= 1;
+        fromV = BCGen_pushTemporary(self, from);
+        to = &fromV;
     }
 
     if (!BCValue_isStackValueOrParameter(to))
     {
-        newTo = BCGen_pushTemporary(self, to);
-        to = &newTo;
+        pushedTo |= 1;
+        toV = BCGen_pushTemporary(self, to);
+        to = &toV;
     }
 
     BCGen_emitLongInstSS(self, inst, to->stackAddr, from->stackAddr);
+
+    if (pushedTo) BCGen_destroyTemporary(self, (BCValue*)to);
+    if (pushedFrom) BCGen_destroyTemporary(self, (BCValue*)from);
 }
 
 #define BC_STORE_FUNC(SZ) \
@@ -3021,23 +3040,32 @@ BC_LOAD_FUNC(64)
 
 static inline void BCGen_MemCpy(BCGen* self, BCValue *dst, const BCValue* src, const BCValue* size)
 {
+    bool pushedSize = (size->vType == BCValueType_Immediate);
+    bool pushedDst = (dst->vType == BCValueType_Immediate);
+    bool pushedSrc = (src->vType == BCValueType_Immediate);
+
     BCValue newSize = BCGen_pushTemporary(self, size);
     BCValue newSrc = BCGen_pushTemporary(self, src);
     BCValue newDst = BCGen_pushTemporary(self, dst);
 
     BCGen_emitLongInstSSS(self, LongInst_MemCpy, newSize.stackAddr, newSrc.stackAddr, newDst.stackAddr);
+
+    if (pushedDst) BCGen_destroyTemporary(self, &newDst);
+    if (pushedSrc) BCGen_destroyTemporary(self, &newSrc);
+    if (pushedSize) BCGen_destroyTemporary(self, &newSize);
 }
 
 static inline void BCGen_Ret(BCGen* self, const BCValue* val)
 {
     LongInst inst = ((BCTypeEnum_basicTypeSize(val->type.type) == 8) ? LongInst_Ret64 : LongInst_Ret32);
-
-    bool created_tmp = false;
+    _Bool newValTemp = 0;
+    BCValue newVal;
 
     if (val->vType == BCValueType_Immediate)
     {
-        BCValue newVal = BCGen_pushTemporary(self, val);
+        newVal = BCGen_pushTemporary(self, val);
         val = &newVal;
+        newValTemp |= 1;
     }
 
     if (BCValue_isStackValueOrParameter(val))
@@ -3049,7 +3077,7 @@ static inline void BCGen_Ret(BCGen* self, const BCValue* val)
         assert(0);//, "I cannot deal with this type of return" ~ enumToString(val.vType));
     }
 
-    if (created_tmp)
+    if (newValTemp)
         BCGen_destroyTemporary(self, (BCValue*)val);
 }
 
@@ -3160,10 +3188,12 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
         if (lhs.vType == BCValueType_Immediate)
         {
             lhs = BCGen_pushTemporary(lhs);
+            pushedLhs |= 1;
         }
         if (rhs.vType == BCValueType_Immediate)
         {
             rhs = BCGen_pushTemporary(rhs);
+            pushedRhs |= 1;
         }
         assert(BCValue_isStackValueOrParameter(&lhs),
             "The lhs of Memcmp is not a StackValue " ~ enumToString(rhs.vType));
@@ -3208,17 +3238,22 @@ static inline void BCGen_Alloc(BCGen* self, BCValue *heapPtr, const BCValue* siz
 {
     BCValue newSize;
     assert(size->type.type == BCTypeEnum_u32);
+    _Bool pushedSize = 0;
 
     if (size->vType == BCValueType_Immediate)
     {
         newSize = BCGen_pushTemporary(self, size);
         size = &newSize;
+        pushedSize |= 1;
     }
 
     assert(BCValue_isStackValueOrParameter(size));
     assert(BCValue_isStackValueOrParameter(heapPtr));
 
     BCGen_emitLongInstSS(self, LongInst_Alloc, heapPtr->stackAddr, size->stackAddr);
+    if (pushedSize)
+        BCGen_destroyTemporary(self, cast(BCValue*)size);
+
 }
 
 static inline void BCGen_Assert(BCGen* self, const BCValue* value, const BCValue* err)
@@ -3230,7 +3265,7 @@ static inline void BCGen_Assert(BCGen* self, const BCValue* value, const BCValue
 
     assert(BCValue_isStackValueOrParameter(value));
     {
-        BCGen_emitLongInstSI(self, LongInst_Assert, BCGen_pushTemporary(self, value).stackAddr, err->imm32.imm32);
+        BCGen_emitLongInstSI(self, LongInst_Assert, value->stackAddr, err->imm32.imm32);
     }
 }
 
@@ -3305,6 +3340,7 @@ static inline void BCGen_Prt(BCGen* self, const BCValue* value, bool isString)
 static inline void BCGen_Not(BCGen* self, BCValue *result, const BCValue* val)
 {
     BCValue newVal;
+
     if (result != val && !BCValue_eq(result, val))
     {
         BCGen_Set(self, result, val);
@@ -3341,14 +3377,9 @@ static inline void BCGen_Jmp(BCGen* self, BCLabel target)
 
 static inline CndJmpBegin BCGen_beginCndJmp(BCGen* self, const BCValue* cond, bool ifTrue)
 {
-    BCValue newCond;
-    if (cond->vType == BCValueType_Immediate)
-    {
-        newCond = BCGen_pushTemporary(self, cond);
-        cond = &newCond;
-    }
+    assert(cond->vType != BCValueType_Immediate);
 
-    CndJmpBegin result = {{self->ip}, *cond, ifTrue};
+    CndJmpBegin result = {{self->ip}, cond, ifTrue};
     self->ip += 2;
     return result;
 }
@@ -3356,12 +3387,11 @@ static inline CndJmpBegin BCGen_beginCndJmp(BCGen* self, const BCValue* cond, bo
 static inline void BCGen_endCndJmp(BCGen* self, CndJmpBegin jmp, BCLabel target)
 {
     uint32_t atIp = jmp.at.addr;
-    BCValue* cond = &jmp.cond;
+    const BCValue* cond = jmp.cond;
     bool ifTrue = jmp.ifTrue;
 
     uint32_t low_word =  (uint32_t)(ifTrue ? LongInst_JmpTrue : LongInst_JmpFalse);
     uint32_t high_word = target.addr.addr;
-
 
     if (BCValue_isStackValueOrParameter(cond))
     {
