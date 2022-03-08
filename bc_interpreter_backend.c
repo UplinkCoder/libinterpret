@@ -1221,7 +1221,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 
     {
         int argOffset = 1;
-        uint64_t* frameP = state.fp;
+        int64_t* frameP = state.fp;
         for(int i = 0; i < n_args;i++)
         {
             BCValue* arg = args + i;
@@ -1293,9 +1293,9 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 
         const int64_t* frameP = state.fp;
 
-        int64_t* lhsRef = &frameP[(lhsOffset / 4)];
-        int64_t* rhs = &frameP[(rhsOffset / 4)];
-        int64_t* opRef = &frameP[(opRefOffset / 4)];
+        int64_t* lhsRef = cast(int64_t*) &frameP[(lhsOffset / 4)];
+        int64_t* rhs = cast(int64_t*) &frameP[(rhsOffset / 4)];
+        int64_t* opRef = cast(int64_t*) &frameP[(opRefOffset / 4)];
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
@@ -2640,7 +2640,7 @@ static inline BCValue BCGen_genLocal(BCGen* self, BCType bct, const char* name)
     uint16_t localAddr = (uint16_t)sp;
     uint16_t localIdx = ++self->localCount;
 
-    BCValue result = {0};
+    BCValue result = BCVALUE_INIT;
     result.type = bct;
     result.stackAddr.addr = localAddr;
     result.localIndex  = localIdx;

@@ -58,7 +58,7 @@ typedef void (*Jmp_t) (void* ctx, BCLabel target);
 typedef uint32_t (*beginJmp_t) (void* ctx);
 typedef void (*endJmp_t) (void* ctx, BCAddr atIp, BCLabel target);
 typedef CndJmpBegin (*beginCndJmp_t) (void* ctx, const BCValue* cond, bool ifTrue);
-typedef void (*endCndJmp_t) (void* ctx, CndJmpBegin jmp, BCLabel target);
+typedef void (*endCndJmp_t) (void* ctx, const CndJmpBegin *jmp, BCLabel target);
 
 typedef void (*Load8_t) (void* ctx, BCValue *dest, const BCValue* from);
 typedef void (*Store8_t) (void* ctx, BCValue *dest, const BCValue* value);

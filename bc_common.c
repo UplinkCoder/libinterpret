@@ -151,48 +151,50 @@ const char* BCType_toChars(BCType* self)
 const char* BCValueType_toChars(const BCValueType* vTypePtr)
 {
     const BCValueType vType = *vTypePtr;
+    const char* result = 0;
 
     switch(vType)
     {
         case BCValueType_Unknown:
-            return "BCValueType_Unknown";
+            result = "BCValueType_Unknown";
 
         case BCValueType_Temporary:
-            return "BCValueType_Temporary";
+            result = "BCValueType_Temporary";
 
         case BCValueType_Parameter:
-            return "BCValueType_Parameter";
+            result = "BCValueType_Parameter";
 
         case BCValueType_Local:
-            return "BCValueType_Local";
+            result = "BCValueType_Local";
 
 
         case BCValueType_StackValue:
-            return "BCValueType_StackValue";
+            result = "BCValueType_StackValue";
 
         case BCValueType_Immediate:
-            return "BCValueType_Immediate";
+            result = "BCValueType_Immediate";
 
         case BCValueType_HeapValue:
-            return "BCValueType_HeapValue";
+            result = "BCValueType_HeapValue";
 
 
         case BCValueType_LastCond:
-            return "BCValueType_LastCond";
+            result = "BCValueType_LastCond";
 
         case BCValueType_Bailout:
-            return "BCValueType_Bailout";
+            result = "BCValueType_Bailout";
 
         case BCValueType_Exception:
-            return "BCValueType_Exception";
+            result = "BCValueType_Exception";
 
         case BCValueType_ErrorWithMessage:
-            return "BCValueType_ErrorWithMessage";
+            result = "BCValueType_ErrorWithMessage";
 
         case BCValueType_Error:
-            return "BCValueType_Error";
+            result = "BCValueType_Error";
     }
 
+    return result;
     assert(0);
 }
 
@@ -210,23 +212,23 @@ const char* BCValueType_toChars(const BCValueType* vTypePtr)
     {
         switch (that.vType)
         {
-        case BCValueType.StackValue, BCValueType.Parameter:
-        case BCValueType.Temporary:
+        case BCValueType_StackValue, BCValueType_Parameter:
+        case BCValueType_Temporary:
             stackAddr = that.stackAddr;
             temporaryIndex = that.temporaryIndex;
             break;
 
-        case BCValueType.Local:
+        case BCValueType_Local:
             stackAddr = that.stackAddr;
             localIndex = that.localIndex;
             this.name = that.name;
             break;
 
-        case BCValueType.HeapValue:
+        case BCValueType_HeapValue:
             heapAddr = that.heapAddr;
             break;
 
-        case BCValueType.Immediate:
+        case BCValueType_Immediate:
             imm32 = that.imm32;
             break;
 
@@ -239,30 +241,36 @@ const char* BCValueType_toChars(const BCValueType* vTypePtr)
 #endif
 #undef STRUCT_NAME
 
+static inline uint32_t BCValue_toU32(const BCValue* self)
+{
+    uint32_t result;
+ 
+    switch (self->vType)
+    {
+        case BCValueType_Parameter :
+        case BCValueType_Temporary :
+        case BCValueType_StackValue :
+        {
+            result = self->stackAddr.addr;
+        } break;
+        case BCValueType_HeapValue :
+        {
+           result = self->heapAddr.addr;
+        } break;
+        case BCValueType_Immediate :
+        {
+            result =  self->imm32.imm32;
+        } break;
+        default:
+        {
+            // printf("toUint not implemented for %s\n", BCValueType_toChars(vType))
+            assert(0);
+        }
+    }
+}
+
 #define STRUCT_NAME BCValue
 #if 0
-    uint STRUCT_NAME::toUint()
-    {
-        switch (this.vType)
-        {
-        case BCValueType.Parameter, BCValueType.Temporary,
-                BCValueType.StackValue:
-                return stackAddr;
-        case BCValueType.HeapValue:
-            return heapAddr;
-        case BCValueType.Immediate:
-            return imm32;
-        case BCValueType.Unknown:
-            return this.imm32;
-        default:
-            {
-                printf("toUint not implemented for %s\n", BCValueType_toChars(vType))
-                assert(0);
-            }
-        }
-
-    }
-
     const char* STRUCT_NAME::toChars() const
     {
         const char* result = "vType: ";
@@ -283,13 +291,13 @@ const char* BCValueType_toChars(const BCValueType* vTypePtr)
     {
         switch (vType)
         {
-        case BCValueType.Local : goto case;
-        case BCValueType.Parameter, BCValueType.Temporary,
-                BCValueType.StackValue:
+        case BCValueType_Local : goto case;
+        case BCValueType_Parameter, BCValueType_Temporary,
+                BCValueType_StackValue:
                 return "stackAddr: " ~ itos(stackAddr);
-        case BCValueType.HeapValue:
+        case BCValueType_HeapValue:
             return "heapAddr: " ~ itos(heapAddr);
-        case BCValueType.Immediate:
+        case BCValueType_Immediate:
             return "imm: " ~ (type.type == BCTypeEnum.i64 || type.type == BCTypeEnum.f52
                     ? itos64(imm64) : itos(imm32));
         default:
@@ -308,34 +316,34 @@ const char* BCValueType_toChars(const BCValueType* vTypePtr)
     STRUCT_NAME(const Imm32 imm32)
     {
         this.type.type = imm32.signed ? BCTypeEnum_i32 : BCTypeEnum_u32;
-        this.vType = BCValueType.Immediate;
+        this.vType = BCValueType_Immediate;
         this.imm32.imm32 = imm32.imm32;
     }
 
     STRUCT_NAME(const Imm64 imm64)
     {
         this.type.type = imm64.signed ? BCTypeEnum_i64 : BCTypeEnum_u64;
-        this.vType = BCValueType.Immediate;
+        this.vType = BCValueType_Immediate;
         this.imm64 = imm64;
     }
 
     STRUCT_NAME(const Imm23f imm23f)
     {
         this.type.type = BCTypeEnum.f23;
-        this.vType = BCValueType.Immediate;
+        this.vType = BCValueType_Immediate;
         this.imm32.imm32 = *cast(uint*)&imm23f;
     }
 
     STRUCT_NAME(const Imm52f imm52f)
     {
         this.type.type = BCTypeEnum.f52;
-        this.vType = BCValueType.Immediate;
+        this.vType = BCValueType_Immediate;
         this.imm64.imm64 = *cast(uint64_t*)&imm52f;
     }
 
     STRUCT_NAME(const BCParameter param)
     {
-        this.vType = BCValueType.Parameter;
+        this.vType = BCValueType_Parameter;
         this.type = param.type;
         this.paramIndex = param.idx;
         this.stackAddr = param.pOffset;
@@ -344,7 +352,7 @@ const char* BCValueType_toChars(const BCValueType* vTypePtr)
 
     STRUCT_NAME(const StackAddr sp, const BCType type, const ushort temporaryIndex)
     {
-        this.vType = BCValueType.StackValue;
+        this.vType = BCValueType_StackValue;
         this.stackAddr = sp;
         this.type = type;
         this.temporaryIndex = temporaryIndex;
@@ -352,7 +360,7 @@ const char* BCValueType_toChars(const BCValueType* vTypePtr)
 
     STRUCT_NAME(const StackAddr sp, const BCType type, const ushort localIndex, const char* name)
     {
-        this.vType = BCValueType.Local;
+        this.vType = BCValueType_Local;
         this.stackAddr = sp;
         this.type = type;
         this.localIndex = localIndex;
@@ -361,14 +369,14 @@ const char* BCValueType_toChars(const BCValueType* vTypePtr)
 
     STRUCT_NAME(const void* base, const short addr, const BCType type)
     {
-        this.vType = BCValueType.StackValue;
+        this.vType = BCValueType_StackValue;
         this.stackAddr = StackAddr(addr);
         this.type = type;
     }
 
     STRUCT_NAME(const HeapAddr addr, const BCType type = i32Type)
     {
-        this.vType = BCValueType.HeapValue;
+        this.vType = BCValueType_HeapValue;
         this.type = type;
         this.heapAddr = addr;
     }
@@ -378,26 +386,26 @@ const char* BCValueType_toChars(const BCValueType* vTypePtr)
         this.vType = heapRef.vType;
         switch (vType)
         {
-        case BCValueType.StackValue, BCValueType.Parameter:
+        case BCValueType_StackValue, BCValueType_Parameter:
             stackAddr = heapRef.stackAddr;
             temporaryIndex = heapRef.temporaryIndex;
             break;
-        case BCValueType.Local:
+        case BCValueType_Local:
             stackAddr = heapRef.stackAddr;
             temporaryIndex = heapRef.localIndex;
             name = heapRef.name;
             break;
 
-        case BCValueType.Temporary:
+        case BCValueType_Temporary:
             stackAddr = heapRef.stackAddr;
             temporaryIndex = heapRef.temporaryIndex;
             break;
 
-        case BCValueType.HeapValue:
+        case BCValueType_HeapValue:
             heapAddr = heapRef.heapAddr;
             break;
 
-        case BCValueType.Immediate:
+        case BCValueType_Immediate:
             imm32 = heapRef.imm32;
             break;
 
@@ -468,83 +476,80 @@ EXTERN_C void BCValue_Init(BCValue* self)
 
 const uint32_t BCTypeEnum_basicTypeSize(const BCTypeEnum bct)
 {
+    uint32_t result = 4;
+
     switch (bct)
     {
     case BCTypeEnum_Undef:
         {
             assert(!"This is not supposed to happen");
-            return 0;
         }
     case BCTypeEnum_c8:
     case BCTypeEnum_i8:
     case BCTypeEnum_u8:
         {
-            return 1;
-        }
+            result = 1;
+        } break;
     case BCTypeEnum_c16:
     case BCTypeEnum_i16:
     case BCTypeEnum_u16:
         {
-            return 2;
-        }
+            result =  2;
+        } break;
     case BCTypeEnum_c32:
     case BCTypeEnum_i32:
     case BCTypeEnum_u32:
     case BCTypeEnum_f23:
         {
-            return 4;
-        }
+        } break;
     case BCTypeEnum_i64:
     case BCTypeEnum_u64:
     case BCTypeEnum_f52:
         {
-            return 8;
+            result = 8;
         }
     case BCTypeEnum_f106:
         {
-            return 16;
-        }
+            result = 16;
+        } break;
 
     case BCTypeEnum_Function:
     case BCTypeEnum_Null:
         {
-            return 4;
-        }
+        } break;
     case BCTypeEnum_Delegate:
         {
-            return 8;
-        }
+            result = 8;
+        } break;
     case BCTypeEnum_Ptr:
-    {
+        {
             assert(!"Ptr is not supposed to be a basicType anymore");
-            return 0;
-    }
+        }
 
     case BCTypeEnum_string8:
     case BCTypeEnum_string16:
     case BCTypeEnum_string32:
-    {
-        //FIXME actually strings don't have a basicTypeSize as is
-        return 16;
-    }
-
-
+        {
+            //FIXME actually strings don't have a basicTypeSize as is
+            result = 16;
+        } break;
     case BCTypeEnum_Void:
     case BCTypeEnum_Array:
     case BCTypeEnum_Slice:
     case BCTypeEnum_Struct:
     case BCTypeEnum_Class:
     case BCTypeEnum_AArray:
-    {
-        return 0;
-    }
+        {
+            result = 0;
+        } break;
 
     default : assert(0);
     }
+
+    return result;
 }
 
-
-const uint32_t adjustmentMask(BCTypeEnum t)
+static inline const uint32_t adjustmentMask(BCTypeEnum t)
 {
     uint32_t mask = 0;
     int typeSize = BCTypeEnum_basicTypeSize(t);
@@ -659,22 +664,6 @@ EXTERN_C bool BCType_isBasicBCType(BCType bct)
             || bct.type == BCTypeEnum_Slice || bct.type == BCTypeEnum_Undef || bct.type == BCTypeEnum_Ptr
             || bct.type == BCTypeEnum_AArray);
 }
-
-#if 0
-EXTERN_C BCValue  i32(const BCValue* v)
-{
-    BCValue result = *v;
-    result.type.type = BCTypeEnum_i32;
-    return result;
-}
-
-EXTERN_C BCValue u32(const BCValue* v)
-{
-    BCValue result = *v;
-    result.type.type = BCTypeEnum_u32;
-    return result;
-}
-#endif
 
 EXTERN_C bool BCValue_isStackValueOrParameter(const BCValue* val)
 {

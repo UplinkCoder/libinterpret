@@ -173,19 +173,19 @@ typedef struct BCHeapRef
 typedef struct BCValue
 {
 #define STRUCT_NAME BCValue
-    BCType type;
     BCValueType vType;
-    bool couldBeVoid; // = false
-
-    BCHeapRef heapRef;
+    BCType type;
     const char* name;
-
     union
     {
         int8_t parameterIndex;
         uint16_t temporaryIndex;
         uint16_t localIndex;
     };
+
+    BCHeapRef heapRef;
+    bool couldBeVoid; // = false
+
 
     union
     {
@@ -234,7 +234,7 @@ typedef struct BCValue
     STRUCT_NAME(const BCHeapRef heapRef);
 #endif
 } STRUCT_NAME;
-
+#define BCVALUE_INIT (BCValue){ BCValueType_Unknown }
 EXTERN_C void BCValue_Init(BCValue* self);
 EXTERN_C bool BCValue_eq(const BCValue* lhs, const BCValue* rhs);
 
@@ -316,9 +316,6 @@ CONSTEXPR static inline uint32_t align16(const uint32_t val)
 }
 
 EXTERN_C const uint32_t BCTypeEnum_basicTypeSize(const BCTypeEnum bct);
-
-EXTERN_C const uint32_t adjustmentMask(BCTypeEnum t);
-
 
 static inline const uint32_t fastLog10(const uint32_t val)
 {

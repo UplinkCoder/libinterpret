@@ -17,15 +17,19 @@ typedef struct Printer
     const char* BufferStart;
     uint32_t BufferCapacity;
 
+    uint32_t vIp;
     uint32_t CurrentIndent;
     _Bool LineIndented;
 
-    uint32_t NumberOfLabels;
+    uint32_t NumberOfLocals;
+    uint32_t NumberOfTemporaries;
+
     ErrorInfo* ErrorInfos;
     uint32_t ErrorInfoCount;
     uint32_t ErrorInfoCapacity;
 
     uint32_t NumberOfFunctions;
+    uint32_t NumberOfParameters;
     char* functionSuffix;
 } Printer;
 
@@ -109,7 +113,7 @@ static inline void Printer_PutStr(Printer* self, const char* str)
 
 static inline void Printer_PutChar(Printer *self, char c)
 {
-    if (UNLIKELY(UNLIKELY(!self->LineIndented) && UNLIKELY(c == '\n')))
+    if (UNLIKELY(UNLIKELY(!self->LineIndented) && UNLIKELY(c != '\n')))
     {
         Printer_PutIndent(self);
     }
@@ -180,7 +184,7 @@ static inline void Printer_DecreaseIndent(Printer* self)
 static inline void Printer_PutDouble(Printer* self, double d)
 {
     Printer_EnsureCapacity(self, 24);
-    
+
     uint32_t sz = fpconv_dtoa(d, self->Buffer);
     self->Buffer += sz;
     self->BufferCapacity -= sz;
@@ -194,14 +198,55 @@ static inline void Printer_PutFloat(Printer* self, float f)
 
 static inline void Printer_PrintType(Printer* self, const BCType* type)
 {
-    assert(0);
+    Printer_PutStr(self, "(BCType){");
+    Printer_PutStr(self, BCTypeEnum_toChars(&type->type));
+
+    Printer_PutStr(self, ", ");
+    Printer_PutU32(self, type->typeIndex);
+    Printer_PutStr(self, "}");
+}
+
+static inline void Printer_PrintLocal(Printer* self, const BCValue* local)
+{
+    assert(local->vType == BCValueType_Local);
+    if (LIKELY(local->name))
+    {
+        Printer_PutStr(self, local->name);
+    }
+    else
+    {
+        Printer_PutStr(self, "local");
+        Printer_PutU32(self, local->localIndex);
+    }
+}
+
+static inline void Printer_PrintParameter(Printer* self, const BCValue* param)
+{
+    assert(param->vType == BCValueType_Parameter);
+    if (LIKELY(param->name))
+    {
+        Printer_PutStr(self, param->name);
+    }
+    else
+    {
+        Printer_PutStr(self, "p");
+        Printer_PutU32(self, param->parameterIndex);
+    }
+}
+
+static inline void Printer_PrintTemporary(Printer* self, const BCValue* tmp)
+{
+    assert(tmp->vType == BCValueType_Temporary);
+
+    Printer_PutStr(self, "tmp");
+    Printer_PutU32(self, tmp->temporaryIndex);
 }
 
 static inline void Printer_PrintBCValue(Printer* self, const BCValue* val)
 {
     BCValueType vType = val->vType;
     const BCType type = val->type;
-    const char* name = val->name;
+
     uint32_t val_imm32 = (vType  == BCValueType_Immediate ? val->imm32.imm32 : 0);
 
     switch (vType)
@@ -218,16 +263,16 @@ static inline void Printer_PrintBCValue(Printer* self, const BCValue* val)
                 } break;
             case BCTypeEnum_i8:
                 {
-                    Printer_PutStr(self, "(Imm32){"); 
+                    Printer_PutStr(self, "(Imm32){");
                     Printer_PutU32(self, val_imm32);
-                    Printer_PutStr(self, " } // i8");
-                    Printer_PutNewlineIndent(self);
+                    Printer_PutStr(self, "} // i8");
+                    Printer_PutNewline(self);
                 } break;
             case BCTypeEnum_u32:
                 {
                     Printer_PutStr(self, "(Imm32){");
                     Printer_PutU32(self, val_imm32);
-                    Printer_PutStr(self, " )");
+                    Printer_PutStr(self, ", false}");
                 } break;
             case BCTypeEnum_i32:
                 {
@@ -237,19 +282,19 @@ static inline void Printer_PrintBCValue(Printer* self, const BCValue* val)
                 } break;
             case BCTypeEnum_i64:
                 {
-                    Printer_PutStr(self, "(Imm64){"); 
+                    Printer_PutStr(self, "(Imm64){");
                     Printer_PutI64(self, val->imm64.imm64);
                     Printer_PutStr(self, "LL, true}");
                 } break;
             case BCTypeEnum_u64:
                 {
-                    Printer_PutStr(self, "(Imm64){"); 
+                    Printer_PutStr(self, "(Imm64){");
                     Printer_PutU64(self, val->imm64.imm64);
-                    Printer_PutStr(self, "ULL , true}");
+                    Printer_PutStr(self, "ULL , false}");
                 } break;
             case BCTypeEnum_f23:
                 {
-                    Printer_PutStr(self, "(Imm23f){"); 
+                    Printer_PutStr(self, "(Imm23f){");
                     Printer_PutFloat(self, *cast(float*)&val_imm32);
                     Printer_PutStr(self, "}");
                 } break;
@@ -265,7 +310,7 @@ static inline void Printer_PrintBCValue(Printer* self, const BCValue* val)
                 } break;
             case BCTypeEnum_Array:
                 {
-                    Printer_PutStr(self, "(Imm32){"); 
+                    Printer_PutStr(self, "(Imm32){");
                     Printer_PutU32(self, val_imm32);
                     Printer_PutStr(self, " /*Array*/)");
                 } break;
@@ -280,8 +325,8 @@ static inline void Printer_PrintBCValue(Printer* self, const BCValue* val)
                     //assert(0, "Unexpected Immediate of Type");
                     char errorBuffer[256];
                     char* msg = errorBuffer;
-     
-                    CatStr(msg, "Unexpected Immediate of Type");
+
+                    CatStr(msg, (char*)"Unexpected Immediate of Type");
                     CatStr(msg, cast(char*)BCTypeEnum_toChars(&type.type));
                     *msg = '\0';
                     LogError(errorBuffer);
@@ -293,7 +338,7 @@ static inline void Printer_PrintBCValue(Printer* self, const BCValue* val)
         {
             if (val->temporaryIndex)
             {
-                Printer_PutStr(self,"tmp"); 
+                Printer_PutStr(self,"tmp");
                 Printer_PutU32(self, val->temporaryIndex);
                 Printer_PutStr(self, self->functionSuffix);
             }
@@ -308,47 +353,30 @@ static inline void Printer_PrintBCValue(Printer* self, const BCValue* val)
 
     case BCValueType_Local :
         {
-            if (name)
-            {
-                Printer_PutStr(self, name);
-            }
-            else
-            {
-                Printer_PutStr(self, "local");
-                Printer_PutU32(self, val->localIndex);
-            }
+            Printer_PrintLocal(self, val);
         } break;
     case BCValueType_Temporary:
         {
-            Printer_PutStr(self, "tmp");
-            Printer_PutU32(self, val->temporaryIndex);
+            Printer_PrintTemporary(self, val);
         } break;
     case BCValueType_Parameter:
         {
-            if (name)
-            {
-                Printer_PutStr(self, name);
-            }
-            else
-            {
-                Printer_PutStr(self, "p");
-                Printer_PutU32(self, val->parameterIndex);
-            }
+            Printer_PrintParameter(self, val);
         } break;
     case BCValueType_Error:
     case BCValueType_ErrorWithMessage:
         {
-            Printer_PutStr(self, "(Imm32){"); 
+            Printer_PutStr(self, "(Imm32){");
             Printer_PutU32(self, val_imm32);
             Printer_PutStr(self, ")");
-            
+
             if (val_imm32)
             {
                 int closeMultilineCommment = 0;
                 assert(self->ErrorInfoCount <= val_imm32);
                 ErrorInfo* eInfo = self->ErrorInfos + (val_imm32 - 1);
-                
-                
+
+
                 if (eInfo->msg && eInfo->msg[0] != '\0')
                 {
                     closeMultilineCommment = 1;
@@ -360,7 +388,7 @@ static inline void Printer_PrintBCValue(Printer* self, const BCValue* val)
                 {
                     Printer_PutStr(self, "// ");
                 }
-                
+
 
                 for(int i = 0; i < eInfo->valueCount; i++)
                 {
@@ -380,25 +408,23 @@ static inline void Printer_PrintBCValue(Printer* self, const BCValue* val)
         {
             char errorBuffer[256];
             char* msg = errorBuffer;
-            
-            CatStr(msg, "Printing for ");
+
+            CatStr(msg, cast(char*)"Printing for ");
             CatStr(msg, cast(char*)BCValueType_toChars(&val->vType));
-            CatStr(msg, " unimplemented ");
+            CatStr(msg, cast(char*)" unimplemented ");
             *msg = '\0';
-            
+
             LogError(errorBuffer);
         }
     }
-
-    Printer_PutStr(self, ")");
 }
 
-static inline void Printer_StreamToFile(Printer* self, FILE* fd)
+extern void Printer_StreamToFile(Printer* self, FILE* fd)
 {
-    uint32_t sz = self->BufferStart - self->Buffer;
+    uint32_t sz = self->Buffer - self->BufferStart;
     uint32_t bytes_written = fwrite(self->BufferStart, 1, sz, fd);
     assert(sz == bytes_written);
-    
+
     self->Buffer = cast(char*)self->BufferStart;
     self->BufferCapacity += sz;
 }
@@ -407,32 +433,62 @@ static inline void Printer_Op3(Printer* self,
     const BCValue *result, const BCValue *lhs, const BCValue *rhs
   , const char* inst)
 {
+    self->vIp += 2;
+    Printer_PutStr(self, inst);
+    Printer_PutChar(self, '(');
 
+    Printer_PrintBCValue(self, result);
+    Printer_PutStr(self, ", ");
+
+    Printer_PrintBCValue(self, lhs);
+    Printer_PutStr(self, ", ");
+
+    Printer_PrintBCValue(self, rhs);
+    Printer_PutChar(self, ')');
+    Printer_PutChar(self, ';');
+
+    Printer_PutNewline(self);
 }
 
 static inline void Printer_Op2(Printer* self,
     const BCValue *lhs, const BCValue *rhs
   , const char* inst)
 {
+    self->vIp += 2;
 
+    Printer_PutStr(self, inst);
+    Printer_PutChar(self, '(');
+
+    Printer_PrintBCValue(self, lhs);
+    Printer_PutStr(self, ", ");
+
+    Printer_PrintBCValue(self, rhs);
+    Printer_PutChar(self, ')');
+    Printer_PutChar(self, ';');
+
+    Printer_PutNewline(self);
 }
 
 static inline void Printer_Op1(Printer* self,
     const BCValue *lhs
   , const char* inst)
 {
+    self->vIp += 2;
 
-}
+    Printer_PutStr(self, inst);
 
-static inline void Printer_Op0(Printer* self
-  , const char* inst)
-{
+    Printer_PutChar(self, '(');
+    Printer_PrintBCValue(self, lhs);
+    Printer_PutChar(self, ')');
+    Printer_PutChar(self, ';');
 
+    Printer_PutNewline(self);
 }
 
 #define PR_OP3(OP) \
     static inline void Printer_##OP(Printer* self, BCValue *result, const BCValue* lhs, const BCValue* rhs) \
     { Printer_Op3(self, result, lhs, rhs, #OP); }
+
 
 PR_OP3(Gt3)
 PR_OP3(Ugt3)
@@ -468,10 +524,6 @@ PR_OP3(And3)
         const BCValue* lhs) \
     { Printer_Op1(self, lhs, #OP); }
 
-#define PR_OP0(OP) \
-    static inline void Printer_##OP(Printer* self) \
-    { Printer_Op0(self, #OP); }
-
 PR_OP2(Store8)
 PR_OP2(Store16)
 PR_OP2(Store32)
@@ -490,15 +542,16 @@ static inline void Printer_InitializeV(Printer* self, uint32_t n_args, va_list a
 {
 }
 
-PR_OP0(Finalize)
+static inline void Printer_Finalize(Printer* self)
+{
+}
 
 static inline uint32_t Printer_beginFunction(Printer* self, uint32_t fnId, const char* name, const void* fn)
 {
-    Printer_IncreaseIndent(self);
-
     if (!fnId)
         fnId = ++self->NumberOfFunctions;
 
+    Printer_PutStr(self, "uint32_t ");
     Printer_PutStr(self, name);
     Printer_PutStr(self, "_idx = ");
     Printer_PutStr(self, "beginFunction(");
@@ -514,77 +567,121 @@ static inline uint32_t Printer_beginFunction(Printer* self, uint32_t fnId, const
     Printer_PutHex(self, cast(uint64_t) fn);
     Printer_PutChar(self, ')');
 
-    Printer_PutNewlineIndent(self);
+    Printer_PutNewline(self);
+    Printer_PutChar(self, '{');
+
+    Printer_IncreaseIndent(self);
+    Printer_PutNewline(self);
 
     return fnId;
 }
 
 static inline void Printer_endFunction(Printer* self, uint32_t fnIdx)
 {
+    Printer_DecreaseIndent(self);
+    Printer_PutChar(self, '}');
+    Printer_PutNewline(self);
+
+    self->NumberOfLocals = 0;
+    self->NumberOfTemporaries = 0;
+    self->NumberOfParameters = 0;
+
     Printer_PutStr(self, "endFunction(");
     Printer_PutU32(self, fnIdx);
     Printer_PutStr(self, ");");
 
-    Printer_DecreaseIndent(self);
-    Printer_PutNewlineIndent(self);
+    Printer_PutNewline(self);
 }
 
-static inline BCValue Printer_genTemporary(Printer* self, const BCType* bct)
+static inline BCValue Printer_genTemporary(Printer* self, BCType bct)
 {
-    Printer_PutStr(self, "genTemporary(");
-    Printer_PrintType(self, bct);
+    BCValue result = {
+        .vType = BCValueType_Temporary,
+        .type = bct,
+    };
+    result.temporaryIndex = ++self->NumberOfTemporaries;
+
+    Printer_PutStr(self, "BCValue ");
+
+    Printer_PrintTemporary(self, &result);
+
+    Printer_PutStr(self, " = genTemporary(");
+    Printer_PrintType(self, &bct);
     Printer_PutStr(self, ");");
-    Printer_PutNewlineIndent(self);
+    Printer_PutNewline(self);
+
+    return result;
 }
 
 PR_OP1(destroyTemporary)
 
-static inline BCValue Printer_genLocal(Printer* self, const BCType* bct, const char* name)
+static inline BCValue Printer_genLocal(Printer* self, BCType bct, const char* name)
 {
-    Printer_PutStr(self, Printer_LocalName(name));
+    BCValue result = {
+        .vType = BCValueType_Local,
+        .type = bct,
+        .name = name
+    };
+    result.localIndex = ++self->NumberOfLocals;
+
+    Printer_PutStr(self, "BCValue ");
+    Printer_PrintLocal(self, &result);
 
     Printer_PutStr(self, " = ");
-
     Printer_PutStr(self, "genLocal(");
 
-    Printer_PrintType(self, bct);
+    Printer_PrintType(self, &bct);
     Printer_PutStr(self, ", ");
 
     Printer_PutQuotedStr(self, name);
 
     Printer_PutStr(self, ");");
-    Printer_PutNewlineIndent(self);
+    Printer_PutNewline(self);
+
+    return result;
 }
 
-static inline BCValue Printer_genParameter(Printer* self, const BCType* bct, const char* name)
+static inline BCValue Printer_genParameter(Printer* self, BCType bct, const char* name)
 {
-    Printer_PutStr(self, Printer_ParameterName(name));
+    BCValue result = {
+        .vType = BCValueType_Parameter,
+        .type = bct,
+        .name = name
+    };
 
-    Printer_PutStr(self, " = ");
+    result.parameterIndex = ++self->NumberOfParameters;
+    Printer_PutStr(self, "BCValue ");
 
-    Printer_PutStr(self, "genParameter(");
+    Printer_PrintParameter(self, &result);
 
-    Printer_PrintType(self, bct);
+    Printer_PutStr(self, " = genParameter(");
+
+    Printer_PrintType(self, &bct);
     Printer_PutStr(self, ", ");
 
-    Printer_PutQuotedStr(self, name);
+    if (LIKELY(name))
+        Printer_PutQuotedStr(self, name);
+    else
+        Printer_PutChar(self, '0');
 
     Printer_PutStr(self, ");");
-    Printer_PutNewlineIndent(self);
+    Printer_PutNewline(self);
+
+    return result;
 }
 
 PR_OP1(emitFlag)
 
-PR_OP2(Alloc);
-PR_OP2(Assert);
-PR_OP3(MemCpy);
+PR_OP2(Alloc)
+PR_OP2(Assert)
+PR_OP3(MemCpy)
 
 static inline void Printer_File(Printer* self, const char* filename)
 {
     Printer_PutStr(self, "File(");
     Printer_PutQuotedStr(self, filename);
     Printer_PutStr(self, ");");
-    Printer_PutNewlineIndent(self);
+    Printer_PutNewline(self);
 }
 
 static inline void Printer_Line(Printer* self, uint32_t line)
@@ -592,7 +689,7 @@ static inline void Printer_Line(Printer* self, uint32_t line)
     Printer_PutStr(self, "Line(");
     Printer_PutU32(self, line);
     Printer_PutStr(self, ");");
-    Printer_PutNewlineIndent(self);
+    Printer_PutNewline(self);
 }
 
 static inline void Printer_Comment(Printer* self, const char* comment)
@@ -600,7 +697,7 @@ static inline void Printer_Comment(Printer* self, const char* comment)
     Printer_PutStr(self, "Comment(");
     Printer_PutQuotedStr(self, comment);
     Printer_PutStr(self, ");");
-    Printer_PutNewlineIndent(self);
+    Printer_PutNewline(self);
 }
 
 static inline void Printer_PutBool(Printer* self, bool v)
@@ -615,11 +712,11 @@ static inline void Printer_Prt(Printer* self, const BCValue* value, bool isStrin
     Printer_PutStr(self, ", ");
     Printer_PutBool(self, isString);
     Printer_PutStr(self, ");");
-    Printer_PutNewlineIndent(self);
+    Printer_PutNewline(self);
 }
 
-PR_OP2(Set);
-PR_OP2(Not);
+PR_OP2(Set)
+PR_OP2(Not)
 
 static inline void Printer_LoadFramePointer(Printer* self, BCValue *result, const int32_t offset)
 {
@@ -628,7 +725,7 @@ static inline void Printer_LoadFramePointer(Printer* self, BCValue *result, cons
     Printer_PutStr(self, ", ");
     Printer_PutI32(self, offset);
     Printer_PutStr(self, ");");
-    Printer_PutNewlineIndent(self);
+    Printer_PutNewline(self);
 
 }
 
@@ -657,35 +754,97 @@ static inline void Printer_Call(Printer* self, BCValue *result, const BCValue* f
 
     Printer_PutU32(self, n_args);
     Printer_PutStr(self, ");");
-    Printer_PutNewlineIndent(self);
+    Printer_PutNewline(self);
 }
 
 static inline BCLabel Printer_genLabel(Printer* self)
 {
-    uint32_t label = self->NumberOfLabels++;
-    BCLabel result = {{label}};
+    BCLabel result = {{self->vIp}};
+
+    Printer_PutStr(self, "genLabel()");
+    Printer_PutNewline(self);
+
     return result;
 }
 
-static inline void Printer_beginJmp(Printer* self)
+static inline BCAddr Printer_beginJmp(Printer* self)
 {
+    BCAddr result = {self->vIp};
 
+    Printer_PutStr(self, "BCAddr jmp");
+    Printer_PutU32(self, result.addr);
+    self->vIp += 2;
+
+    Printer_PutStr(self, " = beginJmp();");
+    Printer_PutNewline(self);
+
+    return result;
+}
+
+static inline void Printer_PrintLabel(Printer* self, const BCLabel* label)
+{
+    Printer_PutStr(self, "label");
+    Printer_PutU32(self, label->addr.addr);
 }
 
 static inline void Printer_Jmp(Printer* self, BCLabel target)
 {
+    Printer_PutStr(self, "Jmp(");
+    Printer_PrintLabel(self, &target);
+
+    Printer_PutStr(self, ");");
+    Printer_PutNewline(self);
 }
 
 static inline void Printer_endJmp(Printer* self, BCAddr atIp, BCLabel target)
 {
+    Printer_PutStr(self, "endJmp(jmp");
+    Printer_PutU32(self, atIp.addr);
+
+    Printer_PutStr(self, ",  ");
+    Printer_PrintLabel(self, &target);
+
+    Printer_PutStr(self, ");");
+    Printer_PutNewline(self);
+}
+
+static inline void Printer_PrintCndJmp(Printer* self, const CndJmpBegin* jmp)
+{
+    Printer_PutStr(self, "cndJmp");
+    Printer_PutU32(self, jmp->at.addr);
 }
 
 static inline CndJmpBegin Printer_beginCndJmp(Printer* self, const BCValue* cond, _Bool ifTrue)
 {
+    CndJmpBegin result = {.at = {self->vIp}, .cond = *cond, .ifTrue = ifTrue};
+
+    Printer_PutStr(self, "CndJmpBegin ");
+    Printer_PrintCndJmp(self, &result);
+    self->vIp += 2;
+
+    Printer_PutStr(self, " = beginCndJmp(");
+
+    Printer_PrintBCValue(self, cond);
+    Printer_PutStr(self, ", ");
+
+    Printer_PutBool(self, ifTrue);
+
+    Printer_PutStr(self, ");");
+    Printer_PutNewline(self);
+
+    return result;
 }
 
-static inline void Printer_endCndJmp(Printer* self, CndJmpBegin jmp, BCLabel target)
+static inline void Printer_endCndJmp(Printer* self, const CndJmpBegin *jmp, BCLabel target)
 {
+    Printer_PutStr(self, "endCndJmp(");
+    Printer_PrintCndJmp(self, jmp);
+
+    Printer_PutStr(self, ", ");
+    Printer_PrintLabel(self, &target);
+
+    Printer_PutStr(self, ");");
+    Printer_PutNewline(self);
 }
 
 PR_OP1(Throw)
@@ -705,7 +864,7 @@ PR_OP3(Realloc)
 
 static inline BCValue Printer_run(Printer* self, uint32_t fnIdx, const BCValue* args, uint32_t n_args)
 {
-    return (BCValue) {0};
+    return (BCValue) {BCValueType_Unknown};
 }
 
 static inline void Printer_destroy_instance(Printer* self)
@@ -715,7 +874,7 @@ static inline void Printer_destroy_instance(Printer* self)
 
 static inline void Printer_new_instance(Printer** resultP)
 {
-    Printer* result =  malloc(sizeof(Printer));
+    Printer* result =  cast(Printer*)malloc(sizeof(Printer));
 
     const uint32_t initialSize = 8192 * 8;
 
@@ -724,8 +883,10 @@ static inline void Printer_new_instance(Printer** resultP)
     result->ErrorInfoCount = 0;
     result->ErrorInfoCapacity = 1024;
     result->ErrorInfos = (ErrorInfo*) malloc(sizeof(ErrorInfo) * 1024);
+    result->NumberOfParameters = 0;
     result->NumberOfFunctions = 0;
-    
+    result->vIp = 0;
+
     *resultP = result;
 }
 
