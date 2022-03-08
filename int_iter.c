@@ -13,7 +13,7 @@
 #endif
 
 #define IntIter_Check(SELF) { \
-    assert(SELF->fd ? (SELF->lastRead - SELF->remaining_chars == \
+    assert((SELF->fd != 0xFFFF)? (SELF->lastRead - SELF->remaining_chars == \
         SELF->currentReadPosition - SELF->char_buf) : 1); \
 }
 
@@ -86,7 +86,7 @@ bool IntIter_NextInt(IntIter* self, int* value)
 
     char c;
 
-    if (self->fd && (self->remaining_chars < 10))
+    if ((self->fd != 0xFFFF) && (self->remaining_chars < 10))
         IntIter_RefillBuffer(self);
 
     IntIter_Check(self);

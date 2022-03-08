@@ -10,8 +10,9 @@
 
 #include "bc_common.h"
 #include "backend_interface_funcs.h"
+#include "bc_interpreter_backend.h"
 
-#ifdef DIS
+#ifdef PRINT_CODE
 # include "int_iter.c"
 #endif
 
@@ -22,197 +23,6 @@
 #else
 #  define DEBUG(...)
 #endif
-
-typedef struct RetainedCall
-{
-    BCValue fn;
-    BCValue* args;
-    uint32_t n_args;
-
-    uint32_t callerId;
-    BCAddr callerIp;
-    StackAddr callerSp;
-} RetainedCall;
-
-
-typedef enum LongInst
-{
-    LongInst_PrintValue,
-    LongInst_RelJmp,
-    LongInst_Ret32,
-    LongInst_Ret64,
-    LongInst_RetS32,
-    LongInst_RetS64,
-    LongInst_Not,
-
-    LongInst_Flg, // writes the conditionFlag into [lw >> 16]
-    //End Former ShortInst
-
-    LongInst_Jmp,
-    LongInst_JmpFalse,
-    LongInst_JmpTrue,
-    LongInst_JmpZ,
-    LongInst_JmpNZ,
-
-    LongInst_PushCatch,
-    LongInst_PopCatch,
-    LongInst_Throw,
-
-    // 2 StackOperands
-    LongInst_Add,
-    LongInst_Sub,
-    LongInst_Div,
-    LongInst_Mul,
-    LongInst_Mod,
-    LongInst_Eq, //sets condflags
-    LongInst_Neq, //sets condflag
-    LongInst_Lt, //sets condflags
-    LongInst_Le,
-    LongInst_Gt, //sets condflags
-    LongInst_Ge,
-    LongInst_Ult,
-    LongInst_Ule,
-    LongInst_Ugt,
-    LongInst_Uge,
-    LongInst_Udiv,
-    LongInst_Umod,
-    LongInst_And,
-    LongInst_And32,
-    LongInst_Or,
-    LongInst_Xor,
-    LongInst_Xor32,
-    LongInst_Lsh,
-    LongInst_Rsh,
-    LongInst_Set,
-
-    LongInst_Memcmp,
-    LongInst_Assert,
-
-    // immediate operand
-    LongInst_ImmAdd,
-    LongInst_ImmSub,
-    LongInst_ImmDiv,
-    LongInst_ImmMul,
-    LongInst_ImmMod,
-    LongInst_ImmEq,
-    LongInst_ImmNeq,
-    LongInst_ImmLt,
-    LongInst_ImmLe,
-    LongInst_ImmGt,
-    LongInst_ImmGe,
-    LongInst_ImmUlt,
-    LongInst_ImmUle,
-    LongInst_ImmUgt,
-    LongInst_ImmUge,
-    LongInst_ImmUdiv,
-    LongInst_ImmUmod,
-    LongInst_ImmAnd,
-    LongInst_ImmAnd32,
-    LongInst_ImmOr,
-    LongInst_ImmXor,
-    LongInst_ImmXor32,
-    LongInst_ImmLsh,
-    LongInst_ImmRsh,
-
-#define FLT32_BEGIN LongInst_FAdd32
-    LongInst_FAdd32,
-    LongInst_FSub32,
-    LongInst_FDiv32,
-    LongInst_FMul32,
-    LongInst_FMod32,
-    LongInst_FEq32,
-    LongInst_FNeq32,
-    LongInst_FLt32,
-    LongInst_FLe32,
-    LongInst_FGt32,
-    LongInst_FGe32,
-#define FLT32_END LongInst_FGe32
-
-    LongInst_F32ToF64,
-    LongInst_F32ToI,
-    LongInst_IToF32,
-
-#define FLT64_BEGIN LongInst_FAdd32
-    LongInst_FAdd64,
-    LongInst_FSub64,
-    LongInst_FDiv64,
-    LongInst_FMul64,
-    LongInst_FMod64,
-    LongInst_FEq64,
-    LongInst_FNeq64,
-    LongInst_FLt64,
-    LongInst_FLe64,
-    LongInst_FGt64,
-    LongInst_FGe64,
-#define FLT64_END LongInst_FGe64
-
-    LongInst_F64ToF32,
-    LongInst_F64ToI,
-    LongInst_IToF64,
-
-    LongInst_SetHighImm32,
-    LongInst_SetImm32,
-    LongInst_SetImm8,
-
-    LongInst_ContextManip,
-    LongInst_Call,
-
-#define HEAP_LOAD_BEGIN LongInst_HeapLoad8
-    LongInst_HeapLoad8,
-    LongInst_HeapLoad16,
-    LongInst_HeapLoad32,
-    LongInst_HeapLoad64,
-#define HEAP_LOAD_END LongInst_HeapLoad64
-
-#define HEAP_STORE_BEGIN LongInst_HeapStore8
-    LongInst_HeapStore8,
-    LongInst_HeapStore32, ///Heap[align4(SP[hi & 0xFFFF)] = SP[hi >> 16]]
-    LongInst_HeapStore16,
-    LongInst_HeapStore64,
-#define HEAP_STORE_END LongInst_HeapStore64
-
-    LongInst_Alloc, /// SP[hi & 0xFFFF] = heapSize; heapSize += SP[hi >> 16]
-    LongInst_MemCpy,
-    LongInst_Realloc,
-
-    LongInst_BuiltinCall, // call a builtin.
-    LongInst_Comment,
-    LongInst_Line,
-    LongInst_File,
-
-    LongInst_max
-} LongInst;
-
-// mask for bit 0-6
-#define INSTMASK 0x7F
-
-/** 2StackInst Layout :
-* [0-6] Instruction
-* [6-7] Unused
-* -----------------
-* [8-31] Unused
-* [32-48] Register (lhs)
-* [48-64] Register (rhs)
-* *************************
-* ImmInstructions Layout :
-* [0-6] Instruction
-* [6-7] Unused
-* ------------------------
-* [8-16] Unused
-* [16-32] Register (lhs)
-* [32-64] Imm32 (rhs)
-* **************************
-* 3 OperandInstuctions // memcpy
-* [0-6] Instruction
-* [6-7] Unused
-* -----------------
-* [16-32] Register (extra_data)
-* [32-48] Register (lhs)
-* [48-64] Register (rhs)
-
-*/
-
-// static_assert(LongInst_max < INSTMASK);
 
 static int16_t BCGen_isShortJump(const int32_t offset)
 {
@@ -241,60 +51,6 @@ static inline uint32_t BCGen_ShortInst16Ex(const LongInst i, uint8_t ex, uint16_
 {
     return i | ex << 8 | imm << 16;
 }
-
-typedef enum BCFunctionTypeEnum
-{
-    BCFunctionTypeEnum_Undef,
-    BCFunctionTypeEnum_Builtin,
-    BCFunctionTypeEnum_Bytecode,
-    BCFunctionTypeEnum_Compiled,
-} BCFunctionTypeEnum;
-
-typedef struct BCFunction
-{
-    void* funcDecl;
-    uint32_t fn;
-
-    BCFunctionTypeEnum type;
-    uint16_t nArgs;
-    uint16_t maxStackUsed;
-
-    uint32_t bytecode_start; // should be const but currently we need to assign to this;
-    uint32_t bytecode_end;
-} BCFunction;
-
-typedef struct BCGen
-{
-    uint32_t* byteCodeArrayExtra;
-    uint32_t byteCodeCount;
-    uint32_t byteCodeExtraCapacity;
-
-    /// ip starts at 4 because 0 should be an invalid address;
-    uint32_t ip;
-    uint32_t sp;
-
-    uint8_t parameterCount;
-    uint16_t temporaryCount;
-
-    BCFunction* functions;
-    uint32_t functionCount;
-    uint32_t functionCapacity;
-
-    uint32_t functionIdx;
-    void* fd;
-    bool insideFunction;
-
-    BCLocal* locals;
-    uint32_t localCount;
-    uint32_t localCapacity;
-
-    RetainedCall* calls;
-    uint32_t callCount;
-    uint32_t callCapacity;
-
-    bool finalized;
-    uint32_t byteCodeArray[8192];
-} BCGen;
 
 static const int max_call_depth = 2000;
 
@@ -332,6 +88,13 @@ static inline void BCGen_Init(BCGen* self)
     self->finalized = false;
 }
 
+static inline void BCGen_Fini(BCGen* self)
+{
+    free(self->locals);
+    free(self->calls);
+    free(self->functions);
+}
+
 typedef enum CtxM {
     CtxM_Undef,
 
@@ -363,17 +126,18 @@ const char* CtxM_toChars(CtxM manip)
     return result;
 }
 
-void BCGen_new_instance(void** pResult)
+void BCGen_new_instance(BCGen** pResult)
 {
     BCGen* gen = (BCGen*) malloc(sizeof(BCGen));
     BCGen_Init(gen);
-    *pResult = (void*)gen;
+    *pResult = gen;
 
     return ;
 }
 
-void BCGen_destroy_instance(void* p)
+void BCGen_destroy_instance(BCGen* p)
 {
+    BCGen_Fini(p);
     free(p);
 }
 
@@ -457,7 +221,7 @@ bool BCInterpreter_Return(BCInterpreter* self)
     return true;
 }
 
-#ifdef DIS
+#ifdef PRINT_CODE
 void PrintCode(IntIter* iter)
 {
     uint32_t ip = 0;
@@ -471,10 +235,11 @@ void PrintCode(IntIter* iter)
         assert(worked);
 
         const int32_t imm32c = (int32_t) hi;
-        ip += 2;
 
+        ip += 2;
         // consider splitting the framePointer in stackHigh and stackLow
 
+        const uint8_t  opSpecial   = ((lw >> 8) 0xFF);
         const uint32_t opRefOffset = (lw >> 16) & 0xFFFF;
         const uint32_t lhsOffset   = hi & 0xFFFF;
         const uint32_t rhsOffset   = (hi >> 16) & 0xFFFF;
@@ -569,19 +334,19 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_SetImm32 R[%d] = %u\n", opRefOffset / 4, hi);
             }
             break;
-        case LongInst_SetHighImm32:
+        case LongInst_SetSpecial:
             {
                 printf("LongInst_SetImm32High R[%d] |= (%u << 32)\n", opRefOffset / 4, hi);
             }
             break;
         case LongInst_ImmEq:
             {
-                printf("LongInst_ImmEq R[%d] == %d", opRefOffset / 4, imm32c);
+                printf("LongInst_ImmEq R[%d] == %d\n", opRefOffset / 4, imm32c);
             }
             break;
         case LongInst_ImmNeq:
             {
-                printf("LongInst_ImmNeq R[%d] != %d", opRefOffset / 4, imm32c);
+                printf("LongInst_ImmNeq R[%d] != %d\n", opRefOffset / 4, imm32c);
             }
             break;
         case LongInst_ImmUlt:
@@ -921,7 +686,7 @@ void PrintCode(IntIter* iter)
             case LongInst_Throw:
             {
                 printf("LongInst_Throw\n");
-                uint expP = ((*opRef) & UINT32_MAX);
+                uint32_t expP = ((*opRef) & UINT32_MAX);
                 auto expTypeIdx = heapPtr->heapData[expP + ClassMetaData.TypeIdIdxOffset];
                 auto expValue = BCValue(HeapAddr(expP), BCType(BCTypeEnum_Class, expTypeIdx));
                 expValue.vType = BCValueType.Exception;
@@ -1024,21 +789,8 @@ void PrintCode(IntIter* iter)
             break;
         case LongInst_PrintValue:
             {
-                bool isString = ((lw & UINT16_MAX) >> 8) != 0;
+                bool isString = opSpecial != 0);
                 printf("LongInst_Print%s\n", (isString ? "String" : "Value"));
-/*
-                if (isString)
-                {
-                    long offset = *opRef;
-                    uint8_t length = heapPtr->heapData[offset];
-                    char* string_start = cast(char*)&heapPtr->heapData[offset + 1];
-                    printf("Printing string: '%.*s'\n", length, string_start);
-                }
-                else
-                {
-                    printf("Addr: %lu, Value %lx\n", (opRef - frameP) * 4, *opRef);
-                }
-*/
             }
             break;
         case LongInst_Not:
@@ -1057,8 +809,13 @@ void PrintCode(IntIter* iter)
                 assert(0);//, "Unsupported right now: BCBuiltin");
             }
             break;
+
         case LongInst_Realloc:
             {
+                const uint32_t result = opRefOffset / 4;
+                const uint32_t ptr =  lhsOffset / 4;
+                const uint32_t newSize =  rhsOffset / 4;
+
                 printf("LongInst_Realloc\n");
 #if 0
                 if (*rhs == 0 && *lhsRef == 0)
@@ -1067,10 +824,6 @@ void PrintCode(IntIter* iter)
                 }
                 else
                 {
-                    const elemSize = (lw >> 8) & 255;
-                    const uint _lhs =  *lhsRef & UINT32_MAX;
-                    const uint _rhs =  *rhs & UINT32_MAX;
-
                     const llbasep = &heapPtr->heapData[_lhs + SliceDescriptor.LengthOffset];
                     const rlbasep = &heapPtr->heapData[_rhs + SliceDescriptor.LengthOffset];
 
@@ -1131,9 +884,10 @@ void PrintCode(IntIter* iter)
                         *opRef = resultPtr;
                     }
                 }
+#endif
             }
             break;
-#endif
+
         case LongInst_Call:
             {
                 printf("LongInst_Call R[%d] = ?\n", (opRefOffset / 4));
@@ -1141,7 +895,7 @@ void PrintCode(IntIter* iter)
             break;
         case LongInst_ContextManip:
             {
-                CtxM manip = cast(CtxM)((lw >> 8) & 0xFF);
+                CtxM manip = cast(CtxM) opSpecial;
                 printf("LongInst_ContextManip {%s, R[%u], %d}",
                        CtxM_toChars(manip), lhsOffset / 4, imm32c);
             }
@@ -1166,7 +920,7 @@ void PrintCode(IntIter* iter)
         case LongInst_Memcmp:
             {
                 printf("LongInst_MemCmp (lhs: R[%d], rhs: R[%d], size: R[%d])\n",
-                    lhsOffset / 4, rhsOffset / 4, opRefOffset / 4,
+                    lhsOffset / 4, rhsOffset / 4, opRefOffset / 4
                 );
             }
             break;
@@ -1178,33 +932,13 @@ void PrintCode(IntIter* iter)
         case LongInst_Line :
             {
                 printf("LongInst_Line \n");
-#if 0
-                uint32_t breakingOn;
-                uint32_t line = hi;
-                foreach(bl;breakLines)
-                {
-                    if (line == bl)
-                    {
-                        debug
-                        if (!__ctfe)
-                        {
-                            import std.stdio;
-                            writeln("breaking at: ", ip-2);
-
-                        }
-                        paused = true;
-                    }
-                    break;
-                }
-#endif
             }
             break;
         }
     }
 }
-#endif // DIS
+#endif // PRINT_CODE
 
-#undef DIS
 static inline uint8_t* BCInterpreter_toRealPointer(const BCInterpreter* self, const BCHeap* heapPtr, uint32_t unrealAddress)
 {
     uint8_t* result = heapPtr->heapData + unrealAddress;
@@ -1222,7 +956,8 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
     assert(self->finalized);
 
     BCInterpreter state = {0};
-    state.ip = 4;
+    BCFunction* f = self->functions + (fnIdx - 1);
+    state.ip = f->bytecode_start;
     state.fp = state.stack;
     state.sp = state.stack;
 
@@ -1299,7 +1034,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
         state.ip += 2;
 
         // consider splitting the framePointer in stackHigh and stackLow
-
+        const uint8_t  opSpecial   = ((lw >> 8) 0xFF);
         const uint32_t opRefOffset = (lw >> 16) & 0xFFFF;
         const uint32_t lhsOffset   = hi & 0xFFFF;
         const uint32_t rhsOffset   = (hi >> 16) & 0xFFFF;
@@ -1317,6 +1052,8 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 
         double drhs = 0;
         double dlhs = 0;
+
+        int64_t rhs_value = 0;
 
         if ((lw & INSTMASK) >= FLT32_BEGIN && (lw & INSTMASK) <= FLT32_END)
         {
@@ -2151,7 +1888,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
                 }
                 else
                 {
-                    const elemSize = (lw >> 8) & 255;
+                    const elemSize = opSpecial;
                     const uint _lhs =  *lhsRef & UINT32_MAX;
                     const uint _rhs =  *rhs & UINT32_MAX;
 
@@ -2899,7 +2636,7 @@ static inline void BCGen_emitArithInstruction(BCGen* self
     }
     else if (rhs_vType == BCValueType_Immediate)
     {
-        const int64_t imm64s = (BCTypeEnum_basicTypeSize(rhs_type_type) == 8 ? cast(int64_t)rhsP->imm64.imm64 : 0);
+        const int64_t imm64s = (BCTypeEnum_basicTypeSize(rhs_type_type) <= 8 ? cast(int64_t)rhsP->imm64.imm64 : 0);
         if  (BCTypeEnum_basicTypeSize(rhs_type_type) <= 4 || (imm64s <= INT32_MAX && imm64s > -INT32_MAX))
         {
             //Change the instruction into the corresponding Imm Instruction;
@@ -3398,11 +3135,11 @@ static inline CndJmpBegin BCGen_beginCndJmp(BCGen* self, const BCValue* cond, bo
     return result;
 }
 
-static inline void BCGen_endCndJmp(BCGen* self, CndJmpBegin jmp, BCLabel target)
+static inline void BCGen_endCndJmp(BCGen* self, const CndJmpBegin* jmp, BCLabel target)
 {
-    uint32_t atIp = jmp.at.addr;
-    const BCValue* cond = jmp.cond;
-    bool ifTrue = jmp.ifTrue;
+    uint32_t atIp = jmp->at.addr;
+    const BCValue* cond = jmp->cond;
+    bool ifTrue = jmp->ifTrue;
 
     uint32_t low_word =  (uint32_t)(ifTrue ? LongInst_JmpTrue : LongInst_JmpFalse);
     uint32_t high_word = target.addr.addr;

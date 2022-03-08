@@ -1,14 +1,12 @@
 #include <stdio.h>
 #include "backend_interface_funcs.h"
-
 extern BackendInterface BCGen_interface;
 
-#if DIS
 #  include <unistd.h>
 #  include "int_iter.h"
   void PrintCode(IntIter*);
-#endif
 
+#include "bc_interpreter_backend.h"
 int main(int argc, char* argv[])
 {
 #if DIS
@@ -49,22 +47,24 @@ int main(int argc, char* argv[])
             BCValue res = i.genLocal(c, (BCType){BCTypeEnum_i32}, "result");
             BCValue res2 = i.genLocal(c, (BCType){BCTypeEnum_i32}, "res2");
 
+            BCValue l1 = imm32(1956);
             i.Add3(c, &res, &a, &b);
             i.Eq3(c, &res2, &a, &b);
-            i.Eq3(c, 0, &a, &res);
+            i.Eq3(c, 0, &res, &res2);
+            i.Eq3(c, 0, &a, &l1);
             i.Ret(c, &res);
 
             i.endFunction(c, fIdx);
         }
 
-        add_idx = i.beginFunction(c, 1, "add");
+        add_idx = i.beginFunction(c, 0, "add");
         {
             BCValue a = i.genParameter(c, (BCType){BCTypeEnum_i32, 0}, "a");
             BCValue b = i.genParameter(c, (BCType){BCTypeEnum_i32, 0}, "b");
 
             BCValue result = i.genLocal(c, (BCType){BCTypeEnum_i32, 0}, "result");
-            BCValue l1 = imm32(64);
 
+            BCValue l1 = imm32(64);
             i.Eq3(c, 0, &a, &l1);
             CndJmpBegin cndJmp2 = i.beginCndJmp(c, 0, false);
             i.Add3(c, &result, &a, &b);
@@ -97,14 +97,15 @@ int main(int argc, char* argv[])
     char* p = textBuffer;
     // yeah I know it's stupid to first convert to text and then disassemble the text
     // but meh ...
-    for(int i = 0; i < g->byteCodeCount; i++)
+    for(int i = 0; i < g->ip; i++)
     {
         p += sprintf(p, "%d ", g->byteCodeArray[i]);
     }
 
     IntIter it;
     IntIter_FromBuffer(&it, textBuffer, p - textBuffer);
-    PrintCode(it);    
+    PrintCode(&it);
+
 #endif
     i.destroy_instance(c);
 
