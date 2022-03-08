@@ -157,45 +157,43 @@ const char* BCValueType_toChars(const BCValueType* vTypePtr)
     {
         case BCValueType_Unknown:
             result = "BCValueType_Unknown";
-
+        break;
         case BCValueType_Temporary:
             result = "BCValueType_Temporary";
-
+        break;
         case BCValueType_Parameter:
             result = "BCValueType_Parameter";
-
+        break;
         case BCValueType_Local:
             result = "BCValueType_Local";
-
-
+        break;
         case BCValueType_StackValue:
             result = "BCValueType_StackValue";
-
+        break;
         case BCValueType_Immediate:
             result = "BCValueType_Immediate";
-
+        break;
         case BCValueType_HeapValue:
             result = "BCValueType_HeapValue";
-
-
+        break;
         case BCValueType_LastCond:
             result = "BCValueType_LastCond";
-
+        break;
         case BCValueType_Bailout:
             result = "BCValueType_Bailout";
-
+        break;
         case BCValueType_Exception:
             result = "BCValueType_Exception";
-
+        break;
         case BCValueType_ErrorWithMessage:
             result = "BCValueType_ErrorWithMessage";
-
+        break;
         case BCValueType_Error:
             result = "BCValueType_Error";
+        break;
     }
 
     return result;
-    assert(0);
 }
 
 #define STRUCT_NAME BCValue
@@ -267,6 +265,8 @@ static inline uint32_t BCValue_toU32(const BCValue* self)
             assert(0);
         }
     }
+
+    return result;
 }
 
 #define STRUCT_NAME BCValue
@@ -507,7 +507,7 @@ const uint32_t BCTypeEnum_basicTypeSize(const BCTypeEnum bct)
     case BCTypeEnum_f52:
         {
             result = 8;
-        }
+        } break;
     case BCTypeEnum_f106:
         {
             result = 16;
