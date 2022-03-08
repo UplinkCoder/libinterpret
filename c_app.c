@@ -91,7 +91,7 @@ int main(int argc, char* argv[])
 
         printf("%d + %d = %d\n", a, b, res.imm32.imm32);
     }
-#if 0
+#if PRINT_CODE
     BCGen* g = c;
     char textBuffer[8192];
     char* p = textBuffer;

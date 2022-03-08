@@ -239,7 +239,7 @@ void PrintCode(IntIter* iter)
         ip += 2;
         // consider splitting the framePointer in stackHigh and stackLow
 
-        const uint8_t  opSpecial   = ((lw >> 8) 0xFF);
+        const uint8_t  opSpecial   = ((lw >> 8) & 0xFF);
         const uint32_t opRefOffset = (lw >> 16) & 0xFFFF;
         const uint32_t lhsOffset   = hi & 0xFFFF;
         const uint32_t rhsOffset   = (hi >> 16) & 0xFFFF;
@@ -334,7 +334,7 @@ void PrintCode(IntIter* iter)
                 printf("LongInst_SetImm32 R[%d] = %u\n", opRefOffset / 4, hi);
             }
             break;
-        case LongInst_SetSpecial:
+        case LongInst_SetHighImm32:
             {
                 printf("LongInst_SetImm32High R[%d] |= (%u << 32)\n", opRefOffset / 4, hi);
             }
@@ -789,7 +789,7 @@ void PrintCode(IntIter* iter)
             break;
         case LongInst_PrintValue:
             {
-                bool isString = opSpecial != 0);
+                bool isString = (opSpecial != 0);
                 printf("LongInst_Print%s\n", (isString ? "String" : "Value"));
             }
             break;
@@ -1034,7 +1034,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
         state.ip += 2;
 
         // consider splitting the framePointer in stackHigh and stackLow
-        const uint8_t  opSpecial   = ((lw >> 8) 0xFF);
+        const uint8_t  opSpecial   = ((lw >> 8) & 0xFF);
         const uint32_t opRefOffset = (lw >> 16) & 0xFFFF;
         const uint32_t lhsOffset   = hi & 0xFFFF;
         const uint32_t rhsOffset   = (hi >> 16) & 0xFFFF;
@@ -2248,7 +2248,7 @@ static inline void BCGen_emitLongInstA(BCGen* self, const LongInst i, const BCAd
 #define BCGen_emitLongInstSI(SELF, I, LHS_ADDR, RHS) \
 { \
     BCGen_emit2(SELF \
-              , I | LHS_ADDR.addr \
+              , I | LHS_ADDR.addr << 16 \
               , RHS); \
 }
 
