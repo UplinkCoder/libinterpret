@@ -91,7 +91,7 @@ int main(int argc, char* argv[])
 
         printf("%d + %d = %d\n", a, b, res.imm32.imm32);
     }
-
+#if 0
     BCGen* g = c;
     char textBuffer[8192];
     char* p = textBuffer;
@@ -105,7 +105,7 @@ int main(int argc, char* argv[])
     IntIter it;
     IntIter_FromBuffer(&it, textBuffer, p - textBuffer);
     PrintCode(it);    
-
+#endif
     i.destroy_instance(c);
 
     return 0;
