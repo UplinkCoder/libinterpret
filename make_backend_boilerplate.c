@@ -164,6 +164,10 @@ int main(int argc, char* argv[])
             );
         }
     }
+    printf("#ifdef __cplusplus\n");
+    printf("extern \"C\"\n");
+    printf("#endif\n");
+
     printf("\nconst BackendInterface %s_interface = {\n", argv[1]);
     printf("    .name = \"%s\",\n\n", argv[1]);
     // .Initialize = (Initialize_t) BCGen_Initialize,
