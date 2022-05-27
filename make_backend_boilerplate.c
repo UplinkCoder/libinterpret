@@ -59,7 +59,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    /// how many funcion pointer types are defined 
+    /// how many funcion pointer types are defined
     int n_functions = 0;
     {
         char *op = backend_funcs_h, *cp;
@@ -118,8 +118,7 @@ int main(int argc, char* argv[])
                     memcpy(function_names[n_parsed], begin_function_type_name, len);
                     function_names[n_parsed][len] = '\0';
                 }
-                cp += 2;
-                assert(*(cp - 1) == ' ');
+                while(*cp != '(') cp++;
                 assert(*(cp) == '(');
                 // now for the argument list we store it inclusive of the ( and )
                 {
@@ -170,14 +169,14 @@ int main(int argc, char* argv[])
     // .Initialize = (Initialize_t) BCGen_Initialize,
     for(int i = 0; i < n_parsed - 1; i++)
     {
-        printf("    .%s = (%s_t) %s_%s,\n"
+        printf("    /*.%s = */(%s_t) %s_%s,\n"
             , function_names[i]
             , function_names[i]
             , argv[1]
             , function_names[i]
         );
     }
-    printf("    .%s = (%s_t) %s_%s\n};\n"
+    printf("    /*.%s = */(%s_t) %s_%s\n};\n"
         , function_names[n_parsed -1]
         , function_names[n_parsed -1]
         , argv[1]
