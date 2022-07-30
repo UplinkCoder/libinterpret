@@ -86,7 +86,7 @@ int main(int argc, char* argv[])
 
     // now we can start the actual parsing
     int n_parsed = 0;
-    
+
     for(char *cp = backend_funcs_h, c = *cp++; c; c = *cp++)
     {
         if (c == 't' && n_parsed < n_functions)

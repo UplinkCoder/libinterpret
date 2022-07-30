@@ -1,8 +1,7 @@
 #ifndef _BC_COMMON_H_
 #define _BC_COMMON_H_ 1
 
-#include <stdint.h>
-#include <stdbool.h>
+#include "compat.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -17,6 +16,10 @@
 #undef  offsetof
 #define offsetof(st, m) \
     ((size_t)((char *)&((st *)0)->m - (char *)0))
+
+#if !defined(UINT32_MAX)
+#  define UINT32_MAX ((uint32_t)0xffffffff)
+#endif
 
 static const uint32_t skipFn = UINT32_MAX;
 static const uint32_t nodeFromName = UINT32_MAX - 1;
@@ -264,13 +267,13 @@ typedef struct CndJmpBegin
 
 static inline bool isStackAddress(uint32_t unrealPointer)
 {
-    // a stack address has the upper 4 bits set
+    // a stack address has the upper 6 bits set
     return (unrealPointer & stackAddrMask) == stackAddrMask;
 }
 
 static inline bool isHeapAddress(uint32_t unrealPointer)
 {
-    // a heap address does not have the upper 3 bits set
+    // a heap address does not have the upper 6 bits set
     return (unrealPointer & stackAddrMask) != stackAddrMask;
 }
 
@@ -324,14 +327,14 @@ CONSTEXPR static inline uint32_t align16(const uint32_t val)
 }
 
 EXTERN_C const uint32_t BCTypeEnum_basicTypeSize(const BCTypeEnum bct);
-
+/*
 static inline const uint32_t fastLog10(const uint32_t val)
 {
     return (val < 10) ? 0 : (val < 100) ? 1 : (val < 1000) ? 2 : (val < 10000) ? 3
         : (val < 100000) ? 4 : (val < 1000000) ? 5 : (val < 10000000) ? 6
         : (val < 100000000) ? 7 : (val < 1000000000) ? 8 : 9;
 }
-
+*/
 /*@unique*/
 /*
 static const fastPow10tbl = [
