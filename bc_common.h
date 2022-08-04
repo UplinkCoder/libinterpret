@@ -1,7 +1,13 @@
 #ifndef _BC_COMMON_H_
 #define _BC_COMMON_H_ 1
 
-#include "compat.h"
+#ifndef _MSC_VER
+#  include <stdint.h>
+#  include <stdbool.h>
+#else
+#  include "../compat.h"
+#endif
+
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -253,9 +259,9 @@ EXTERN_C bool BCValue_eq(const BCValue* lhs, const BCValue* rhs);
 
 typedef struct CndJmpBegin
 {
-    const BCAddr at;
-    const BCValue* cond;
-    const bool ifTrue;
+    BCAddr at;
+    BCValue* cond;
+    bool ifTrue;
 } CndJmpBegin;
 
 #define stackAddrMask  ((1 << 31) | \
