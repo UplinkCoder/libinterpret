@@ -1,5 +1,11 @@
+/*
+ * Written By Stefan Koch in 2016 - 2022
+*/
+
 #ifndef _BC_INTERPRETER_BACKEND_H_
 #define _BC_INTERPRETER_BACKEND_H_
+
+#include "compat.h"
 
 typedef struct RetainedCall
 {
@@ -11,6 +17,12 @@ typedef struct RetainedCall
     BCAddr callerIp;
     StackAddr callerSp;
 } RetainedCall;
+
+#define IS_CMP_INST(INST) \
+    (((INST) >= FIRST_REG_CMP & (INST) <= LAST_REG_CMP) || \
+     ((INST) >= FIRST_IMM_CMP & (INST) <= LAST_IMM_CMP) || \
+     ((INST) >= FIRST_F32_CMP & (INST) <= LAST_F32_CMP) || \
+     ((INST) >= FIRST_F64_CMP & (INST) <= LAST_F64_CMP))
 
 
 typedef enum LongInst
@@ -42,6 +54,7 @@ typedef enum LongInst
     LongInst_Div,
     LongInst_Mul,
     LongInst_Mod,
+#define FIRST_REG_CMP LongInst_Eq
     LongInst_Eq, //sets condflags
     LongInst_Neq, //sets condflag
     LongInst_Lt, //sets condflags
@@ -52,6 +65,7 @@ typedef enum LongInst
     LongInst_Ule,
     LongInst_Ugt,
     LongInst_Uge,
+#define LAST_REG_CMP LongInst_Uge
     LongInst_Udiv,
     LongInst_Umod,
     LongInst_And,
@@ -72,6 +86,7 @@ typedef enum LongInst
     LongInst_ImmDiv,
     LongInst_ImmMul,
     LongInst_ImmMod,
+#define FIRST_IMM_CMP LongInst_ImmEq
     LongInst_ImmEq,
     LongInst_ImmNeq,
     LongInst_ImmLt,
@@ -82,6 +97,7 @@ typedef enum LongInst
     LongInst_ImmUle,
     LongInst_ImmUgt,
     LongInst_ImmUge,
+#define LAST_IMM_CMP LongInst_ImmUge
     LongInst_ImmUdiv,
     LongInst_ImmUmod,
     LongInst_ImmAnd,
@@ -98,12 +114,14 @@ typedef enum LongInst
     LongInst_FDiv32,
     LongInst_FMul32,
     LongInst_FMod32,
+#define FIRST_F32_CMP LongInst_FEq32
     LongInst_FEq32,
     LongInst_FNeq32,
     LongInst_FLt32,
     LongInst_FLe32,
     LongInst_FGt32,
     LongInst_FGe32,
+#define LAST_F32_CMP LongInst_FGe32
 #define FLT32_END LongInst_FGe32
 
     LongInst_F32ToF64,
@@ -116,12 +134,14 @@ typedef enum LongInst
     LongInst_FDiv64,
     LongInst_FMul64,
     LongInst_FMod64,
+#define FIRST_F64_CMP LongInst_FEq64
     LongInst_FEq64,
     LongInst_FNeq64,
     LongInst_FLt64,
     LongInst_FLe64,
     LongInst_FGt64,
     LongInst_FGe64,
+#define LAST_F64_CMP LongInst_FGe64
 #define FLT64_END LongInst_FGe64
 
     LongInst_F64ToF32,
@@ -149,6 +169,8 @@ typedef enum LongInst
     LongInst_HeapStore64,
 #define HEAP_STORE_END LongInst_HeapStore64
 
+    LongInst_SetMode,
+
     LongInst_Alloc, /// SP[hi & 0xFFFF] = heapSize; heapSize += SP[hi >> 16]
     LongInst_MemCpy,
     LongInst_Realloc,
@@ -163,34 +185,13 @@ typedef enum LongInst
     LongInst_max
 } LongInst;
 
-// mask for bit 0-6
 #define INSTMASK 0x7F
 
-/** 2StackInst Layout :
-* [0-6] Instruction
-* [6-7] Unused
-* -----------------
-* [8-31] Unused
-* [32-48] Register (lhs)
-* [48-64] Register (rhs)
-* *************************
-* ImmInstructions Layout :
-* [0-6] Instruction
-* [6-7] Unused
-* ------------------------
-* [8-16] Unused
-* [16-32] Register (lhs)
-* [32-64] Imm32 (rhs)
-* **************************
-* 3 OperandInstuctions // memcpy
-* [0-6] Instruction
-* [6-7] Unused
-* -----------------
-* [16-32] Register (extra_data)
-* [32-48] Register (lhs)
-* [48-64] Register (rhs)
 
-*/
+#include "bc_common.h"
+#include "backend_interface_funcs.h"
+
+
 
 typedef enum BCFunctionTypeEnum
 {

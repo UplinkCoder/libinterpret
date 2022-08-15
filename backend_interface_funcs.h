@@ -9,15 +9,17 @@ typedef void (*Initialize_t) (void* ctx, uint32_t n_args, ...);
 typedef void (*InitializeV_t) (void* ctx, uint32_t n_args, va_list args);
 typedef void (*Finalize_t) (void* ctx);
 
-typedef uint32_t (*beginFunction_t) (void* ctx, uint32_t fnId, const void* fd);
-typedef void* (*endFunction_t) (void* ctx, uint32_t fnIdx);
+typedef uint32_t (*BeginFunction_t) (void* ctx, uint32_t fnId, const void* fd);
+typedef void* (*EndFunction_t) (void* ctx, uint32_t fnIdx);
 
-typedef BCValue (*genTemporary_t) (void* ctx, BCType bct);
-typedef void (*destroyTemporary_t) (void* ctx, BCValue* tmp);
+typedef BCValue (*GenTemporary_t) (void* ctx, BCType bct);
+typedef void (*DestroyTemporary_t) (void* ctx, BCValue* tmp);
 
-typedef BCValue (*genLocal_t) (void* ctx, BCType bct, const char* name);
-typedef BCValue (*genParameter_t) (void* ctx, BCType bct, const char* name);
-typedef void (*emitFlag_t) (void* ctx, BCValue* lhs);
+typedef BCValue (*GenLocal_t) (void* ctx, BCType bct, const char* name);
+typedef void (*DestroyLocal_t) (void* ctx, BCValue* local);
+
+typedef BCValue (*GenParameter_t) (void* ctx, BCType bct, const char* name);
+typedef void (*EmitFlag_t) (void* ctx, BCValue* lhs);
 
 typedef void (*Alloc_t) (void* ctx, BCValue *heapPtr, const BCValue* size);
 typedef void (*Assert_t) (void* ctx, const BCValue* value, const BCValue* err);
@@ -56,12 +58,12 @@ typedef void (*Not_t) (void* ctx, BCValue *result, const BCValue* val);
 typedef void (*LoadFramePointer_t) (void* ctx, BCValue *result, const int32_t offset);
 
 typedef void (*Call_t) (void* ctx, BCValue *result, const BCValue* fn, const BCValue* args, uint32_t n_args);
-typedef BCLabel (*genLabel_t) (void* ctx);
+typedef BCLabel (*GenLabel_t) (void* ctx);
 typedef void (*Jmp_t) (void* ctx, BCLabel target);
-typedef BCAddr (*beginJmp_t) (void* ctx);
-typedef void (*endJmp_t) (void* ctx, BCAddr atIp, BCLabel target);
-typedef CndJmpBegin (*beginCndJmp_t) (void* ctx, const BCValue* cond, bool ifTrue);
-typedef void (*endCndJmp_t) (void* ctx, const CndJmpBegin *jmp, BCLabel target);
+typedef BCAddr (*BeginJmp_t) (void* ctx);
+typedef void (*EndJmp_t) (void* ctx, BCAddr atIp, BCLabel target);
+typedef CndJmpBegin (*BeginCndJmp_t) (void* ctx, const BCValue* cond, bool ifTrue);
+typedef void (*EndCndJmp_t) (void* ctx, const CndJmpBegin *jmp, BCLabel target);
 
 typedef void (*Load8_t) (void* ctx, BCValue *dest, const BCValue* from);
 typedef void (*Store8_t) (void* ctx, BCValue *dest, const BCValue* value);
@@ -96,6 +98,8 @@ typedef void (*init_instance_t) (void * result_p);
 typedef void (*ReadI32_t) (void* ctx, const BCValue* val, const ReadI32_cb_t readCb, void* userCtx);
 typedef void (*ReadI32_cb_t)(uint32_t value, void* userCtx);
 
+typedef void (*ValueCallback_cb_t)(BCValue* value, void* userCtx);
+
 typedef struct BackendInterface
 {
     const char* name;
@@ -104,15 +108,18 @@ typedef struct BackendInterface
     void (*const InitializeV) (void* ctx, uint32_t n_args, va_list args);
     void (*const Finalize) (void* ctx);
 
-    uint32_t (*const beginFunction) (void* ctx, uint32_t fnId, const void* fd);
-    void* (*const endFunction) (void* ctx, uint32_t fnIdx);
+    uint32_t (*const BeginFunction) (void* ctx, uint32_t fnId, const void* fd);
+    void* (*const EndFunction) (void* ctx, uint32_t fnIdx);
 
-    BCValue (*const genTemporary) (void* ctx, BCType bct);
-    void (*const destroyTemporary) (void* ctx, BCValue* tmp);
+    BCValue (*const GenTemporary) (void* ctx, BCType bct);
+    void (*const DestroyTemporary) (void* ctx, BCValue* tmp);
 
-    BCValue (*const genLocal) (void* ctx, BCType bct, const char* name);
-    BCValue (*const genParameter) (void* ctx, BCType bct, const char* name);
-    void (*const emitFlag) (void* ctx, BCValue* lhs);
+    BCValue (*const GenLocal) (void* ctx, BCType bct, const char* name);
+    void (*const DestroyLocal) (void* ctx, BCValue* local);
+
+    BCValue (*const GenParameter) (void* ctx, BCType bct, const char* name);
+
+    void (*const EmitFlag) (void* ctx, BCValue* lhs);
 
     void (*const Alloc) (void* ctx, BCValue *heapPtr, const BCValue* size);
     void (*const Assert) (void* ctx, const BCValue* value, const BCValue* err);
@@ -151,12 +158,13 @@ typedef struct BackendInterface
     void (*const LoadFramePointer) (void* ctx, BCValue *result, const int32_t offset);
 
     void (*const Call) (void* ctx, BCValue *result, const BCValue* fn, const BCValue* args, uint32_t n_args);
-    BCLabel (*const genLabel) (void* ctx);
+
+    BCLabel (*const GenLabel) (void* ctx);
     void (*const Jmp) (void* ctx, BCLabel target);
-    BCAddr (*const beginJmp) (void* ctx);
-    void (*const endJmp) (void* ctx, BCAddr atIp, BCLabel target);
-    CndJmpBegin (*const beginCndJmp) (void* ctx, const BCValue* cond, bool ifTrue);
-    void (*const endCndJmp) (void* ctx, const CndJmpBegin *jmp, BCLabel target);
+    BCAddr (*const BeginJmp) (void* ctx);
+    void (*const EndJmp) (void* ctx, BCAddr atIp, BCLabel target);
+    CndJmpBegin (*const BeginCndJmp) (void* ctx, const BCValue* cond, bool ifTrue);
+    void (*const EndCndJmp) (void* ctx, const CndJmpBegin *jmp, BCLabel target);
 
     void (*const Load8) (void* ctx, BCValue *dest, const BCValue* from);
     void (*const Store8) (void* ctx, BCValue *dest, const BCValue* value);
@@ -182,7 +190,8 @@ typedef struct BackendInterface
     void (*const Memcmp) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs);
     void (*const Realloc) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs, const uint32_t size);
 
-    BCValue (*const run) (void* ctx, uint32_t fnIdx, const BCValue* args, uint32_t n_args);
+    BCValue (*const Run) (void* ctx, uint32_t fnIdx, const BCValue* args, uint32_t n_args);
+
     void (*const destroy_instance) (void* ctx);
     void (*const new_instance) (void ** result_p);
     uint32_t (*const sizeof_instance) (void);

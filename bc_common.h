@@ -5,7 +5,7 @@
 #  include <stdint.h>
 #  include <stdbool.h>
 #else
-#  include "../compat.h"
+#  include "compat.h"
 #endif
 
 #include <assert.h>
@@ -98,6 +98,9 @@ typedef enum BCTypeEnum
 
     BCTypeEnum_Function, // synonymous to i32
     BCTypeEnum_Delegate, // synonymous to {i32, i32}
+
+    BCTypeEnum_ValueCallback, // {void (*f)(BCValue*, void*), void*}
+    BCTypeEnum_VoidCallback, // {void (*f)(void*), void*}
 
     //  everything below here is not used by the bc layer.
     BCTypeEnum_Array,
@@ -609,6 +612,7 @@ template ensureIsBCGen(BCGenT)
 static const BCTypeEnum smallIntegerTypes[] = {BCTypeEnum_u16, BCTypeEnum_u8,
                                       BCTypeEnum_i16, BCTypeEnum_i8,
                                       BCTypeEnum_c32, BCTypeEnum_c16, BCTypeEnum_c8};
+#undef ARRAY_SIZE
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof(A[0]))
 
 EXTERN_C BCTypeEnum BCTypeEnum_commonTypeEnum(BCTypeEnum lhs, BCTypeEnum rhs);

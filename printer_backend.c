@@ -1,5 +1,7 @@
 #include "backend_interface_funcs.h"
 #include "bc_common.h"
+#include "fpconv/fpconv.c"
+#include "int_to_str.c"
 #include <assert.h>
 
 #define cast(T) (T)
@@ -34,24 +36,15 @@ typedef struct Printer
     char* functionName;
 } Printer;
 
-#ifdef _WIN32
-#  define LIKELY(EXPR) EXPR
-#  define UNLIKELY(EXPR) EXPR
-#else
-#  define LIKELY(EXPR) __builtin_expect(!!(EXPR), 1)
-#  define UNLIKELY(EXPR) __builtin_expect(!!(EXPR), 0)
-#endif
-
 void static inline Printer_EnsureCapacity(Printer* self, uint32_t capacity)
 {
-    if (UNLIKELY(self->BufferCapacity < capacity))
+    if (self->BufferCapacity < capacity)
     {
         assert(0); // we don't support growing yet :->
     }
 }
 
-#include "int_to_str.c"
-#include "fpconv/fpconv.c"
+// #include "int_to_str.c"
 
 static inline void Printer_PutNewline(Printer* self)
 {
@@ -86,7 +79,7 @@ static inline void Printer_PutStr(Printer* self, const char* str)
     uint32_t length = 0;
     Printer_EnsureCapacity(self, 128);
 
-    if (UNLIKELY(!self->LineIndented))
+    if (!self->LineIndented)
     {
         Printer_PutIndent(self);
         Printer_EnsureCapacity(self, 128);
@@ -100,7 +93,7 @@ static inline void Printer_PutStr(Printer* self, const char* str)
             length++;
             *self->Buffer++ = c;
 
-            if (UNLIKELY((length & 128)))
+            if (length & 128)
             {
                 self->BufferCapacity -= 128;
                 length -= 128;
@@ -114,7 +107,7 @@ static inline void Printer_PutStr(Printer* self, const char* str)
 
 static inline void Printer_PutChar(Printer *self, char c)
 {
-    if (UNLIKELY(UNLIKELY(!self->LineIndented) && UNLIKELY(c != '\n')))
+    if ((!self->LineIndented) && (c != '\n'))
     {
         Printer_PutIndent(self);
     }
@@ -127,10 +120,10 @@ static inline void Printer_PutChar(Printer *self, char c)
 
 static inline void Printer_PutQuotedStr(Printer* self, const char* str)
 {
-    if (LIKELY(str))
+    if (str)
     {
         Printer_PutChar(self, '"');
-        if (LIKELY(*str)) Printer_PutStr(self, str);
+        if (*str) Printer_PutStr(self, str);
         Printer_PutChar(self, '"');
     }
     else
@@ -143,18 +136,18 @@ static inline void Printer_PutHex(Printer* self, const uint64_t v)
 {
     char buffer[17];
 
-    char* begin_number = u64tohexstr(v, buffer);
+    char* Begin_number = u64tohexstr(v, buffer);
 
-    Printer_PutStr(self, begin_number);
+    Printer_PutStr(self, Begin_number);
 }
 
 static inline void Printer_PutU64(Printer* self, const uint64_t v)
 {
     char buffer[21];
 
-    char* begin_number = u64tostr(v, buffer);
+    char* Begin_number = u64tostr(v, buffer);
 
-    Printer_PutStr(self, begin_number);
+    Printer_PutStr(self, Begin_number);
 }
 
 
@@ -162,9 +155,9 @@ static inline void Printer_PutI64(Printer* self, const int64_t v)
 {
     char buffer[21];
 
-    char* begin_number = i64tostr(v, buffer);
+    char* Begin_number = i64tostr(v, buffer);
 
-    Printer_PutStr(self, begin_number);
+    Printer_PutStr(self, Begin_number);
 }
 
 #define Printer_PutU32 Printer_PutU64
@@ -210,7 +203,7 @@ static inline void Printer_PrintType(Printer* self, const BCType* type)
 static inline void Printer_PrintLocal(Printer* self, const BCValue* local)
 {
     assert(local->vType == BCValueType_Local);
-    if (LIKELY(local->name))
+    if (local->name)
     {
         Printer_PutStr(self, local->name);
     }
@@ -224,7 +217,7 @@ static inline void Printer_PrintLocal(Printer* self, const BCValue* local)
 static inline void Printer_PrintParameter(Printer* self, const BCValue* param)
 {
     assert(param->vType == BCValueType_Parameter);
-    if (LIKELY(param->name))
+    if (param->name)
     {
         Printer_PutStr(self, param->name);
     }
@@ -559,7 +552,7 @@ static inline void Printer_Finalize(Printer* self)
     Printer_PutNewline(self);
 }
 
-static inline uint32_t Printer_beginFunction(Printer* self, uint32_t fnIdx, const char* name)
+static inline uint32_t Printer_BeginFunction(Printer* self, uint32_t fnIdx, const char* name)
 {
     if (!fnIdx)
         fnIdx = ++self->NumberOfFunctions;
@@ -576,7 +569,7 @@ static inline uint32_t Printer_beginFunction(Printer* self, uint32_t fnIdx, cons
         Printer_PutU32(self, fnIdx);
     }
     Printer_PutStr(self, "_idx = ");
-    Printer_PutStr(self, "beginFunction(");
+    Printer_PutStr(self, "BeginFunction(");
     Printer_PutU32(self, fnIdx);
 
     Printer_PutStr(self, ", ");
@@ -595,7 +588,7 @@ static inline uint32_t Printer_beginFunction(Printer* self, uint32_t fnIdx, cons
     return fnIdx;
 }
 
-static inline void Printer_endFunction(Printer* self, uint32_t fnIdx)
+static inline void Printer_EndFunction(Printer* self, uint32_t fnIdx)
 {
     Printer_DecreaseIndent(self);
     Printer_PutChar(self, '}');
@@ -642,7 +635,8 @@ static inline BCValue Printer_genTemporary(Printer* self, BCType bct)
     return result;
 }
 
-PR_OP1(destroyTemporary)
+PR_OP1(DestroyTemporary)
+PR_OP1(DestroyLocal)
 
 static inline BCValue Printer_genLocal(Printer* self, BCType bct, const char* name)
 {
@@ -670,7 +664,7 @@ static inline BCValue Printer_genLocal(Printer* self, BCType bct, const char* na
     return result;
 }
 
-static inline BCValue Printer_genParameter(Printer* self, BCType bct, const char* name)
+static inline BCValue Printer_GenParameter(Printer* self, BCType bct, const char* name)
 {
     BCValue result = {
         .vType = BCValueType_Parameter,
@@ -683,12 +677,12 @@ static inline BCValue Printer_genParameter(Printer* self, BCType bct, const char
 
     Printer_PrintParameter(self, &result);
 
-    Printer_PutStr(self, " = genParameter(");
+    Printer_PutStr(self, " = GenParameter(");
 
     Printer_PrintType(self, &bct);
     Printer_PutStr(self, ", ");
 
-    if (LIKELY(name))
+    if (name)
         Printer_PutQuotedStr(self, name);
     else
         Printer_PutChar(self, '0');
@@ -792,21 +786,21 @@ static inline void Printer_PrintLabel(Printer* self, const BCLabel* label)
     Printer_PutU32(self, label->addr.addr);
 }
 
-static inline BCLabel Printer_genLabel(Printer* self)
+static inline BCLabel Printer_GenLabel(Printer* self)
 {
     BCLabel result = {{self->vIp}};
     if (self->LastLabel != self->vIp)
     {
 
         Printer_PrintLabel(self, &result);
-        Printer_PutStr(self, " = genLabel();");
+        Printer_PutStr(self, " = GenLabel();");
         Printer_PutNewline(self);
         self->LastLabel = self->vIp;
     }
     return result;
 }
 
-static inline BCAddr Printer_beginJmp(Printer* self)
+static inline BCAddr Printer_BeginJmp(Printer* self)
 {
     BCAddr result = {self->vIp};
 
@@ -814,7 +808,7 @@ static inline BCAddr Printer_beginJmp(Printer* self)
     Printer_PutU32(self, result.addr);
     self->vIp += 2;
 
-    Printer_PutStr(self, " = beginJmp();");
+    Printer_PutStr(self, " = BeginJmp();");
     Printer_PutNewline(self);
 
     return result;
@@ -829,9 +823,9 @@ static inline void Printer_Jmp(Printer* self, BCLabel target)
     Printer_PutNewline(self);
 }
 
-static inline void Printer_endJmp(Printer* self, BCAddr atIp, BCLabel target)
+static inline void Printer_EndJmp(Printer* self, BCAddr atIp, BCLabel target)
 {
-    Printer_PutStr(self, "endJmp(jmp");
+    Printer_PutStr(self, "EndJmp(jmp");
     Printer_PutU32(self, atIp.addr);
 
     Printer_PutStr(self, ",  ");
@@ -847,16 +841,16 @@ static inline void Printer_PrintCndJmp(Printer* self, const CndJmpBegin* jmp)
     Printer_PutU32(self, jmp->at.addr);
 }
 
-static inline CndJmpBegin Printer_beginCndJmp(Printer* self, const BCValue* cond, _Bool ifTrue)
+static inline CndJmpBegin Printer_BeginCndJmp(Printer* self, const BCValue* cond, _Bool ifTrue)
 {
     CndJmpBegin result =
-        {.at = {self->vIp}, .cond = cond, .ifTrue = ifTrue};
+        {.at = {self->vIp}, .cond = cast(BCValue*)cond, .ifTrue = ifTrue};
 
     Printer_PutStr(self, "CndJmpBegin ");
     Printer_PrintCndJmp(self, &result);
     self->vIp += 2;
 
-    Printer_PutStr(self, " = beginCndJmp(");
+    Printer_PutStr(self, " = BeginCndJmp(");
 
     if (cond)
         Printer_PrintBCValue(self, cond);
@@ -872,7 +866,7 @@ static inline CndJmpBegin Printer_beginCndJmp(Printer* self, const BCValue* cond
     return result;
 }
 
-static inline void Printer_endCndJmp(Printer* self, const CndJmpBegin *jmp, BCLabel target)
+static inline void Printer_EndCndJmp(Printer* self, const CndJmpBegin *jmp, BCLabel target)
 {
     Printer_PutStr(self, "endCndJmp(");
     Printer_PrintCndJmp(self, jmp);
@@ -909,6 +903,23 @@ static inline void Printer_destroy_instance(Printer* self)
     free(self);
 }
 
+static inline uint32_t Printer_sizeof_instance(void)
+{
+    return sizeof(Printer);
+}
+
+static inline void Printer_init_instance(Printer* intstance)
+{
+    (*intstance) = (Printer){};
+    const uint32_t initialSize = 8192 * 8;
+
+    intstance->BufferStart = intstance->Buffer = (char*)malloc(initialSize);
+    intstance->BufferCapacity = initialSize;
+    intstance->ErrorInfoCount = 0;
+    intstance->ErrorInfoCapacity = 1024;
+    intstance->ErrorInfos = (ErrorInfo*) malloc(sizeof(ErrorInfo) * 1024);
+}
+
 static inline void Printer_new_instance(Printer** resultP)
 {
     Printer* result =  cast(Printer*)malloc(sizeof(Printer));
@@ -937,13 +948,16 @@ const BackendInterface Printer_interface = {
     .Initialize = (Initialize_t) Printer_Initialize,
     .InitializeV = (InitializeV_t) Printer_InitializeV,
     .Finalize = (Finalize_t) Printer_Finalize,
-    .beginFunction = (beginFunction_t) Printer_beginFunction,
-    .endFunction = (endFunction_t) Printer_endFunction,
-    .genTemporary = (genTemporary_t) Printer_genTemporary,
-    .destroyTemporary = (destroyTemporary_t) Printer_destroyTemporary,
-    .genLocal = (genLocal_t) Printer_genLocal,
-    .genParameter = (genParameter_t) Printer_genParameter,
-    .emitFlag = (emitFlag_t) Printer_emitFlag,
+
+    .BeginFunction = (BeginFunction_t) Printer_BeginFunction,
+    .EndFunction = (EndFunction_t) Printer_EndFunction,
+
+    .GenTemporary = (GenTemporary_t) Printer_genTemporary,
+    .DestroyTemporary = (DestroyTemporary_t) Printer_DestroyTemporary,
+    .GenLocal = (GenLocal_t) Printer_genLocal,
+    .DestroyLocal = (DestroyLocal_t) Printer_DestroyLocal,
+    .GenParameter = (GenParameter_t) Printer_GenParameter,
+    .EmitFlag = (EmitFlag_t) Printer_emitFlag,
     .Alloc = (Alloc_t) Printer_Alloc,
     .Assert = (Assert_t) Printer_Assert,
     .MemCpy = (MemCpy_t) Printer_MemCpy,
@@ -977,12 +991,12 @@ const BackendInterface Printer_interface = {
     .Not = (Not_t) Printer_Not,
     .LoadFramePointer = (LoadFramePointer_t) Printer_LoadFramePointer,
     .Call = (Call_t) Printer_Call,
-    .genLabel = (genLabel_t) Printer_genLabel,
+    .GenLabel = (GenLabel_t) Printer_GenLabel,
     .Jmp = (Jmp_t) Printer_Jmp,
-    .beginJmp = (beginJmp_t) Printer_beginJmp,
-    .endJmp = (endJmp_t) Printer_endJmp,
-    .beginCndJmp = (beginCndJmp_t) Printer_beginCndJmp,
-    .endCndJmp = (endCndJmp_t) Printer_endCndJmp,
+    .BeginJmp = (BeginJmp_t) Printer_BeginJmp,
+    .EndJmp = (EndJmp_t) Printer_EndJmp,
+    .BeginCndJmp = (BeginCndJmp_t) Printer_BeginCndJmp,
+    .EndCndJmp = (EndCndJmp_t) Printer_EndCndJmp,
     .Load8 = (Load8_t) Printer_Load8,
     .Store8 = (Store8_t) Printer_Store8,
     .Load16 = (Load16_t) Printer_Load16,
@@ -1003,7 +1017,9 @@ const BackendInterface Printer_interface = {
     .F64ToF32 = (F64ToF32_t) Printer_F64ToF32,
     .Memcmp = (Memcmp_t) Printer_Memcmp,
     .Realloc = (Realloc_t) Printer_Realloc,
-    .run = (run_t) Printer_run,
+    .Run = (run_t) Printer_run,
     .destroy_instance = (destroy_instance_t) Printer_destroy_instance,
-    .new_instance = (new_instance_t) Printer_new_instance
+    .new_instance = (new_instance_t) Printer_new_instance,
+    .sizeof_instance = (sizeof_instance_t) Printer_sizeof_instance,
+    .init_instance = (init_instance_t) Printer_init_instance,
 };

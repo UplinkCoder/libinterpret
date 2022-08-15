@@ -172,6 +172,7 @@ typedef struct BCInterpreter {
     int64_t* fp;
     int64_t* sp;
     uint32_t ip;
+    uint32_t mode;
 
     uint32_t n_return_addrs;
 
@@ -788,12 +789,18 @@ void BCGen_PrintCode(BCGen* self, uint32_t start, uint32_t end)
             break;
         case LongInst_Ret32:
             {
-                printf("LongInst_Ret32 R[%d]\n", opRefOffset / 4);
+                if (hi)
+                    printf("LongInst_Ret32 %u\n", (hi == INT32_MIN ? 0 : hi));
+                else
+                    printf("LongInst_Ret32 R[%d]\n", opRefOffset / 4);
             }
             break;
         case LongInst_RetS32:
             {
-                printf("LongInst_RetS32 R[%d]\n", opRefOffset / 4);
+                if (hi)
+                    printf("LongInst_RetS32 %d\n", (hi == INT32_MIN ? 0 : hi));
+                else
+                    printf("LongInst_RetS32 R[%d]\n", opRefOffset / 4);
             }
             break;
         case LongInst_RetS64:
@@ -959,6 +966,10 @@ void BCGen_PrintCode(BCGen* self, uint32_t start, uint32_t end)
         case LongInst_Line :
             {
                 printf("LongInst_Line \n");
+            } break;
+        case LongInst_SetMode :
+            {
+                printf("LongInst_SetMode \n");
             }
             break;
         }
@@ -978,6 +989,10 @@ static inline uint8_t* BCInterpreter_toRealPointer(const BCInterpreter* self, co
     return result;
 }
 
+#define MODE_STICKY_MASK  ((0x3) << 7)
+#define MODE_STICKY_TRUE  ((0x1) << 7)
+#define MODE_STICKY_FALSE ((0x2) << 7)
+#define MODE_CND_SET       0x7
 BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_args, BCHeap* heapPtr)
 {
     assert(self->finalized);
@@ -1060,6 +1075,23 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
         const int32_t imm32c = *(cast(int32_t*)&((codeP)[state.ip + 1]));
         state.ip += 2;
 
+        if (IS_CMP_INST(lw & INSTMASK) && (state.mode & MODE_STICKY_MASK))
+        {
+            switch(state.mode & MODE_STICKY_MASK)
+            {
+                case MODE_STICKY_TRUE:
+                {
+                    if ((state.mode & MODE_CND_SET) && cond == 0)
+                        continue;
+                } break;
+                case MODE_STICKY_FALSE:
+                {
+                    if ((state.mode & MODE_CND_SET) && (cond == 1 || cond == -1))
+                        continue;
+                } break;
+            }
+        }
+
         // consider splitting the framePointer in stackHigh and stackLow
         const uint8_t  opSpecial   = ((lw >> 8) & 0xFF);
         const uint32_t opRefOffset = (lw >> 16) & 0xFFFF;
@@ -1084,9 +1116,9 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 
         if ((lw & INSTMASK) >= FLT32_BEGIN && (lw & INSTMASK) <= FLT32_END)
         {
-            uint32_t _lhs = *lhsRef & UINT32_MAX;
+            uint32_t _lhs = (*lhsRef) & UINT32_MAX;
             flhs = *(float*)&_lhs;
-            uint32_t _rhs = *rhs & UINT32_MAX;
+            uint32_t _rhs = (*rhs) & UINT32_MAX;
             frhs = *(float*)&_rhs;
         }
         else if ((lw & INSTMASK) >= FLT64_BEGIN && (lw & INSTMASK) <= FLT64_END)
@@ -1122,7 +1154,6 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 
         case LongInst_ImmDiv:
             {
-                printf("LongInst_ImmDiv\n");
                 (*opRef) /= imm32c;
             }
             break;
@@ -1324,32 +1355,32 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_FGt32 :
             {
-                cond = flhs > frhs;
+               cond = (flhs > frhs);
             }
             break;
         case LongInst_FGe32 :
             {
-                cond = flhs >= frhs;
+               cond = (flhs >= frhs);
             }
             break;
         case LongInst_FEq32 :
             {
-                cond = flhs == frhs;
+               cond = (flhs == frhs);
             }
             break;
         case LongInst_FNeq32 :
             {
-                cond = flhs != frhs;
+               cond = (flhs != frhs);
             }
             break;
         case LongInst_FLt32 :
             {
-                cond = flhs < frhs;
+               cond = (flhs < frhs);
             }
             break;
         case LongInst_FLe32 :
             {
-                cond = flhs <= frhs;
+               cond = (flhs <= frhs);
             }
             break;
         case LongInst_F32ToF64 :
@@ -1408,32 +1439,32 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_FEq64 :
             {
-                cond = dlhs == drhs;
+               cond = (dlhs == drhs);
             }
             break;
         case LongInst_FNeq64 :
             {
-                cond = dlhs < drhs;
+               cond = (dlhs < drhs);
             }
             break;
         case LongInst_FLt64 :
             {
-                cond = dlhs < drhs;
+               cond = (dlhs < drhs);
             }
             break;
         case LongInst_FLe64 :
             {
-                cond = dlhs <= drhs;
+               cond = (dlhs <= drhs);
             }
             break;
         case LongInst_FGt64 :
             {
-                cond = dlhs > drhs;
+               cond = (dlhs > drhs);
             }
             break;
         case LongInst_FGe64 :
             {
-                cond = dlhs >= drhs;
+               cond = (dlhs >= drhs);
             }
             break;
 
@@ -1615,7 +1646,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_JmpFalse:
             {
-                if (cond != 0)
+                if (cond == 0)
                 {
                     state.ip = hi;
                 }
@@ -1623,7 +1654,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_JmpTrue:
             {
-                if (cond == 0)
+                if (cond != 0)
                 {
                     state.ip = hi;
                 }
@@ -1705,13 +1736,21 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 
         case LongInst_Ret32:
             {
-                state.cRetval = imm32(*opRef & UINT32_MAX);
+                if (hi)
+                    state.cRetval = imm32(hi == INT32_MIN ? 0 : hi);
+                else
+                    state.cRetval = imm32(*opRef & UINT32_MAX);
+
                 if (BCInterpreter_Return(&state)) return state.cRetval;
             }
             break;
         case LongInst_RetS32:
             {
-                state.cRetval = imm32_(*opRef & UINT32_MAX, true);
+                if (hi)
+                    state.cRetval = imm32_((hi == INT32_MIN ? 0 : hi), true);
+                else
+                    state.cRetval = imm32_(*opRef & UINT32_MAX, true);
+
                 if (BCInterpreter_Return(&state)) return state.cRetval;
             }
             break;
@@ -2022,8 +2061,12 @@ L_LongInst_Comment:
                     break;
                 }
 #endif
-            }
-            break;
+            } break;
+        case LongInst_SetMode:
+            {
+                uint16_t mode = lw >> 16;
+                int32_t value = (int32_t) hi;
+            } break;
         }
     }
     BCValue bailoutValue;
@@ -2201,6 +2244,28 @@ void BCGen_destroyTemporary(BCGen* self, BCValue* tmp)
     }
 
     if (self->sp - sz == tmp->stackAddr.addr)
+    {
+        // this is the last thing we pushed on
+        // free the stack space immediately.
+        self->sp -= sz;
+    }
+}
+
+void BCGen_destroyLocal(BCGen* self, BCValue* local)
+{
+    assert(BCValue_isStackValueOrParameter(local));//, "tmporary has to be stack-value");
+    uint32_t sz;
+
+    if (BCType_isBasicBCType(local->type))
+    {
+        sz = align4(BCTypeEnum_basicTypeSize(local->type.type));
+    }
+    else
+    {
+        sz = 4;
+    }
+
+    if (self->sp - sz == local->stackAddr.addr)
     {
         // this is the last thing we pushed on
         // free the stack space immediately.
@@ -2618,7 +2683,7 @@ static inline void BCGen_Arith(BCGen* self, BCValue *result, const BCValue* lhs,
 
 
 #define BC_ARITH_FUNC(OP) \
-    static inline void BCGen_##OP##3(BCGen* self, BCValue *result, const BCValue* lhs, const BCValue* rhs)\
+    static inline void BCGen_##OP##3(BCGen* self, BCValue *result, const BCValue* lhs, const BCValue* rhs) \
     {     BCGen_Arith(self, result, lhs, rhs, LongInst_##OP); }
 
 BC_ARITH_FUNC(Add)
@@ -2701,17 +2766,29 @@ static inline void BCGen_Ret(BCGen* self, const BCValue* val)
     LongInst inst = ((BCTypeEnum_basicTypeSize(val->type.type) == 8) ? LongInst_Ret64 : LongInst_Ret32);
     _Bool newValTemp = 0;
     BCValue newVal;
+    uint32_t hi = 0;
 
     if (val->vType == BCValueType_Immediate)
     {
-        newVal = BCGen_pushTemporary(self, val);
-        val = &newVal;
-        newValTemp |= 1;
+        if (inst == LongInst_Ret32 && val->imm32.imm32 != INT32_MIN)
+        {
+            if (val->imm32.imm32 == 0)
+                hi = INT32_MIN;
+            else
+                hi = val->imm32.imm32;
+        }
+        else
+        {
+            newVal = BCGen_pushTemporary(self, val);
+            val = &newVal;
+            newValTemp |= 1;
+        }
     }
 
-    if (BCValue_isStackValueOrParameter(val))
+    if (BCValue_isStackValueOrParameter(val)
+     || (val->vType == BCValueType_Immediate))
     {
-        BCGen_emit2(self, BCGen_ShortInst16(inst, val->stackAddr.addr), 0);
+        BCGen_emit2(self, BCGen_ShortInst16(inst, val->stackAddr.addr), hi);
     }
     else
     {
@@ -2899,11 +2976,12 @@ static inline void BCGen_Alloc(BCGen* self, BCValue *heapPtr, const BCValue* siz
 
 static inline void BCGen_Assert(BCGen* self, const BCValue* value, const BCValue* err)
 {
+/*
     assert((err->vType == BCValueType_Error
         || err->vType == BCValueType_Immediate)
         && (err->type.type == BCTypeEnum_i32
         || err->type.type == BCTypeEnum_u32));
-
+*/
     assert(BCValue_isStackValueOrParameter(value));
     {
         BCGen_emitLongInstSI(self, LongInst_Assert, value->stackAddr, err->imm32.imm32);
@@ -3021,7 +3099,7 @@ static inline CndJmpBegin BCGen_beginCndJmp(BCGen* self, const BCValue* cond, bo
     assert(!cond ||
            cond->vType != BCValueType_Immediate);
 
-    CndJmpBegin result = {{self->ip}, cond, ifTrue};
+    CndJmpBegin result = {{self->ip}, cast(BCValue*)cond, ifTrue};
     self->ip += 2;
     return result;
 }
@@ -3112,13 +3190,14 @@ const BackendInterface BCGen_interface = {
 
     .InitializeV = (InitializeV_t) BCGen_InitializeV,
     .Finalize = (Finalize_t) BCGen_Finalize,
-    .beginFunction = (beginFunction_t) BCGen_beginFunction,
-    .endFunction = (endFunction_t) BCGen_endFunction,
-    .genTemporary = (genTemporary_t) BCGen_genTemporary,
-    .destroyTemporary = (destroyTemporary_t) BCGen_destroyTemporary,
-    .genLocal = (genLocal_t) BCGen_genLocal,
-    .genParameter = (genParameter_t) BCGen_genParameter,
-    .emitFlag = (emitFlag_t) BCGen_emitFlag,
+    .BeginFunction = (BeginFunction_t) BCGen_beginFunction,
+    .EndFunction = (EndFunction_t) BCGen_endFunction,
+    .GenTemporary = (GenTemporary_t) BCGen_genTemporary,
+    .DestroyTemporary = (DestroyTemporary_t) BCGen_destroyTemporary,
+    .GenLocal = (GenLocal_t) BCGen_genLocal,
+    .DestroyLocal = (DestroyLocal_t) BCGen_destroyLocal,
+    .GenParameter = (GenParameter_t) BCGen_genParameter,
+    .EmitFlag = (EmitFlag_t) BCGen_emitFlag,
     .Alloc = (Alloc_t) BCGen_Alloc,
     .Assert = (Assert_t) BCGen_Assert,
     .MemCpy = (MemCpy_t) BCGen_MemCpy,
@@ -3152,12 +3231,12 @@ const BackendInterface BCGen_interface = {
     .Not = (Not_t) BCGen_Not,
     .LoadFramePointer = (LoadFramePointer_t) BCGen_LoadFramePointer,
     .Call = (Call_t) BCGen_Call,
-    .genLabel = (genLabel_t) BCGen_genLabel,
+    .GenLabel = (GenLabel_t) BCGen_genLabel,
     .Jmp = (Jmp_t) BCGen_Jmp,
-    .beginJmp = (beginJmp_t) BCGen_beginJmp,
-    .endJmp = (endJmp_t) BCGen_endJmp,
-    .beginCndJmp = (beginCndJmp_t) BCGen_beginCndJmp,
-    .endCndJmp = (endCndJmp_t) BCGen_endCndJmp,
+    .BeginJmp = (BeginJmp_t) BCGen_beginJmp,
+    .EndJmp = (EndJmp_t) BCGen_endJmp,
+    .BeginCndJmp = (BeginCndJmp_t) BCGen_beginCndJmp,
+    .EndCndJmp = (EndCndJmp_t) BCGen_endCndJmp,
     .Load8 = (Load8_t) BCGen_Load8,
     .Store8 = (Store8_t) BCGen_Store8,
     .Load16 = (Load16_t) BCGen_Load16,
@@ -3178,7 +3257,7 @@ const BackendInterface BCGen_interface = {
     .F64ToF32 = (F64ToF32_t) BCGen_F64ToF32,
     .Memcmp = (Memcmp_t) BCGen_Memcmp,
     .Realloc = (Realloc_t) BCGen_Realloc,
-    .run = (run_t) BCGen_run,
+    .Run = (run_t) BCGen_run,
     .destroy_instance = (destroy_instance_t) BCGen_destroy_instance,
     .new_instance = (new_instance_t) BCGen_new_instance,
     .sizeof_instance = BCGen_sizeof_instance,
