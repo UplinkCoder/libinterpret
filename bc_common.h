@@ -5,9 +5,8 @@
 #  include <stdint.h>
 #  include <stdbool.h>
 #else
-#  include "compat.h"
+#  include "../os/compat.h"
 #endif
-
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -37,6 +36,11 @@ typedef struct HeapAddr
 {
     uint32_t addr;
 } HeapAddr;
+
+typedef struct ExternalAddr
+{
+    uint32_t addr;
+} ExternalAddr;
 
 typedef struct StackAddr
 {
@@ -74,7 +78,7 @@ typedef enum BCTypeEnum
     BCTypeEnum_c16,
     BCTypeEnum_c32,
 
-    /// signed by default
+    /// signed integer
     BCTypeEnum_i8,
     /// DITTO
     BCTypeEnum_i16,
@@ -103,12 +107,15 @@ typedef enum BCTypeEnum
     BCTypeEnum_VoidCallback, // {void (*f)(void*), void*}
 
     //  everything below here is not used by the bc layer.
+    BCTypeEnum_Enum,
     BCTypeEnum_Array,
-    BCTypeEnum_AArray,
     BCTypeEnum_Struct,
-    BCTypeEnum_Class,
     BCTypeEnum_Ptr,
+
+    BCTypeEnum_Tuple,
+    BCTypeEnum_Class,
     BCTypeEnum_Slice,
+    BCTypeEnum_AArray,
 } BCTypeEnum;
 
 EXTERN_C const char* BCTypeEnum_toChars(const BCTypeEnum* self);
@@ -144,22 +151,22 @@ typedef enum BCValueType
 {
     BCValueType_Unknown = 0,
 
-    BCValueType_Temporary = 1,
-    BCValueType_Parameter = 2,
-    BCValueType_Local = 3,
+    BCValueType_Temporary  = 1,
+    BCValueType_Parameter  = 2,
+    BCValueType_Local      = 3,
 
     BCValueType_StackValue = 1 << 3,
-    BCValueType_Immediate = 2 << 3,
-    BCValueType_HeapValue = 3 << 3,
+    BCValueType_Immediate  = 2 << 3,
+    BCValueType_HeapValue  = 3 << 3,
+    BCValueType_External   = 4 << 3,
 
-    BCValueType_LastCond = 0xFB,
-    BCValueType_Bailout = 0xFC,
+    BCValueType_LastCond  = 0xFB,
+    BCValueType_Bailout   = 0xFC,
     BCValueType_Exception = 0xFD,
     BCValueType_ErrorWithMessage = 0xFE,
-    BCValueType_Error = 0xFF, //Pinned = 0x80,
+    BCValueType_Error     = 0xFF, //Pinned = 0x80,
     /// Pinned values can be returned
     /// And should be kept in the compacted heap
-
 } BCValueType;
 
 EXTERN_C const char* BCValueType_toChars(const BCValueType* vTypePtr);
@@ -172,12 +179,14 @@ typedef struct BCHeapRef
     {
         uint16_t tmpIndex;
         uint16_t localIndex;
+        uint8_t paramIndex;
     };
 
     union
     {
         HeapAddr heapAddr;
         StackAddr stackAddr;
+        ExternalAddr externalAddr;
         Imm32 imm32;
     };
 
@@ -201,6 +210,7 @@ typedef struct BCValue
         int8_t parameterIndex;
         uint16_t temporaryIndex;
         uint16_t localIndex;
+        uint16_t externalIndex;
     };
 
     BCHeapRef heapRef;
@@ -211,6 +221,7 @@ typedef struct BCValue
     {
         StackAddr stackAddr;
         HeapAddr heapAddr;
+        ExternalAddr externalAddr;
         Imm32 imm32;
         Imm64 imm64;
 /* for now we represent floats in imm32 or imm64 respectively
@@ -254,8 +265,10 @@ typedef struct BCValue
     STRUCT_NAME(const BCHeapRef heapRef);
 #endif
 } STRUCT_NAME;
-#define BCVALUE_INIT (BCValue){ BCValueType_Unknown }
-EXTERN_C void BCValue_Init(BCValue* self);
+extern BCValue BCValue_Init;
+
+#define BCVALUE_INIT BCValue_Init;
+
 EXTERN_C bool BCValue_eq(const BCValue* lhs, const BCValue* rhs);
 
 #undef STRUCT_NAME
@@ -267,23 +280,35 @@ typedef struct CndJmpBegin
     bool ifTrue;
 } CndJmpBegin;
 
+// heap address 00 - 10
+// external address 10
+// stack address 11
+
+
+#define AddrMask  ((1 << 31) | \
+                   (1 << 30))
+
 #define stackAddrMask  ((1 << 31) | \
-                        (1 << 30) | \
-                        (1 << 29) | \
-                        (1 << 28) | \
-                        (1 << 27) | \
-                        (1 << 26))
+                        (1 << 30))
+
+#define externalAddrMask (1 << 31)
 
 static inline bool isStackAddress(uint32_t unrealPointer)
 {
-    // a stack address has the upper 6 bits set
-    return (unrealPointer & stackAddrMask) == stackAddrMask;
+    // a stack address has the upper 1 bits set
+    return (unrealPointer & AddrMask) == stackAddrMask;
+}
+
+static inline bool isExternalAddress(uint32_t unrealPointer)
+{
+    // an external address has
+    return (unrealPointer & AddrMask) == externalAddrMask;
 }
 
 static inline bool isHeapAddress(uint32_t unrealPointer)
 {
-    // a heap address does not have the upper 6 bits set
-    return (unrealPointer & stackAddrMask) != stackAddrMask;
+    // a heap address does not have the upper 1 bits set
+    return (unrealPointer & stackAddrMask) == 0;
 }
 
 static inline uint32_t toStackOffset(uint32_t unrealPointer)
@@ -298,13 +323,6 @@ CONSTEXPR static inline const uint32_t align4(const uint32_t val)
     return ((val + 3) & ~3);
 }
 
-#define storeu32(PTR, V32) \
- ((PTR)[0] = (V32 >> 0)  & 0xFF, \
-  (PTR)[1] = (V32 >> 8)  & 0xFF, \
-  (PTR)[2] = (V32 >> 16) & 0xFF, \
-  (PTR)[3] = (V32 >> 24) & 0xFF)
-
-/*
 static inline void storeu32(uint8_t* ptr, const uint32_t v32)
 {
     ptr[0] = (v32 >> 0)  & 0xFF;
@@ -312,14 +330,8 @@ static inline void storeu32(uint8_t* ptr, const uint32_t v32)
     ptr[2] = (v32 >> 16) & 0xFF;
     ptr[3] = (v32 >> 24) & 0xFF;
 }
-*/
 
-#define loadu32(PTR) \
-   (((PTR)[0] << 0) \
-  | ((PTR)[1] << 8) \
-  | ((PTR)[2] << 16) \
-  | ((PTR)[3] << 24))
-/*
+
 static inline uint32_t loadu32(const uint8_t* ptr)
 {
     uint32_t v32 = (ptr[0] << 0)
@@ -328,7 +340,7 @@ static inline uint32_t loadu32(const uint8_t* ptr)
                  | (ptr[3] << 24);
     return v32;
 }
-*/
+
 
 CONSTEXPR static inline uint32_t align16(const uint32_t val)
 {
@@ -336,6 +348,7 @@ CONSTEXPR static inline uint32_t align16(const uint32_t val)
 }
 
 EXTERN_C const uint32_t BCTypeEnum_basicTypeSize(const BCTypeEnum bct);
+void* alloc_with_malloc(void* ctx, uint32_t size, void* fn);
 /*
 static inline const uint32_t fastLog10(const uint32_t val)
 {
@@ -420,6 +433,8 @@ EXTERN_C bool BCType_isBasicBCType(BCType bct);
 
 EXTERN_C bool BCValue_isStackValueOrParameter(const BCValue* val);
 
+EXTERN_C BCValue BCValue_fromHeapref(const BCHeapRef heapRef);
+
 static const int BCHeap_initHeapMax = (1 << 15);
 
 typedef struct BCHeap
@@ -458,6 +473,93 @@ typedef struct BCParameter
     const char* name;
 } BCParameter;
 
+typedef struct BCStructField
+{
+    const char* name;
+    BCType type;
+    uint32_t offset;
+    uint32_t size;
+} BCStructField;
+
+typedef struct BCStructType
+{
+    BCStructField* fields;
+    const char* name;
+
+    uint16_t nFields;
+    uint16_t alignOf;
+    uint32_t sizeOf;
+
+    BCType type;
+} BCStructType;
+
+typedef struct BCTupleType
+{
+    BCStructField* fields;
+
+    uint16_t nFields;
+    uint16_t alignOf;
+    uint32_t sizeOf;
+
+    BCType type;
+} BCTupleType;
+
+typedef struct BCEnumMember {
+    const char* name;
+    BCValue value;
+} BCEnumMember;
+
+typedef struct BCEnumType
+{
+    BCEnumMember* members;
+    const char* name;
+
+    uint16_t nMembers;
+    BCTypeEnum baseType;
+} BCEnumType;
+
+typedef struct BCPointerType
+{
+    BCType elementType;
+} BCPointerType;
+
+typedef struct BCArrayType
+{
+    BCType elementType;
+    uint32_t arraySize;
+} BCArrayType;
+
+typedef struct BCFunctionType
+{
+    BCType returnType;
+    BCType* parameterTypes;
+    uint32_t nParameterTypes;
+} BCFunctionType;
+
+typedef enum BCTypeInfoKind
+{
+    BCTypeInfofKind_Invalid,
+    BCTypeInfofKind_Enum,
+    BCTypeInfofKind_Ptr,
+    BCTypeInfofKind_Array,
+    BCTypeInfofKind_Struct,
+    BCTypeInfofKind_Function,
+    BCTypeInfofKind_Tuple,
+} BCTypeInfoKind;
+
+typedef struct BCTypeInfo
+{
+    BCTypeEnum kind;
+    union
+    {
+        struct BCEnumType enumType;
+        struct BCStructType structType;
+        struct BCFunctionType functionType;
+        struct BCTupleType tupleType;
+        struct BCArrayType arrayType;
+        struct BCPointerType pointerType;
+    };
+} BCTypeInfo;
 
 #define imm32(VALUE) imm32_((VALUE), false)
 
@@ -616,6 +718,8 @@ static const BCTypeEnum smallIntegerTypes[] = {BCTypeEnum_u16, BCTypeEnum_u8,
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof(A[0]))
 
 EXTERN_C BCTypeEnum BCTypeEnum_commonTypeEnum(BCTypeEnum lhs, BCTypeEnum rhs);
+static inline void AllocDefaultHeap(BCHeap* newHeap);
+
 #undef offsetof
 
 static const BCType BCType_i32 = {BCTypeEnum_i32};

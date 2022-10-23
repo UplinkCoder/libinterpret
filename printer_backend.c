@@ -1,7 +1,6 @@
 #include "backend_interface_funcs.h"
 #include "bc_common.h"
 #include "fpconv/fpconv.c"
-#include "int_to_str.c"
 #include <assert.h>
 
 #define cast(T) (T)
@@ -21,7 +20,7 @@ typedef struct Printer
 
     uint32_t vIp;
     uint32_t CurrentIndent;
-    _Bool LineIndented;
+    bool LineIndented;
 
     uint32_t NumberOfLocals;
     uint32_t NumberOfTemporaries;
@@ -34,6 +33,11 @@ typedef struct Printer
     uint32_t NumberOfParameters;
     uint32_t LastLabel;
     char* functionName;
+
+    alloc_fn_t allocMemory;
+    get_typeinfo_fn_t getTypeInfo;
+    void* allocCtx;
+    void* getTypeInfoCtx;
 } Printer;
 
 void static inline Printer_EnsureCapacity(Printer* self, uint32_t capacity)
@@ -617,10 +621,11 @@ static inline void Printer_EndFunction(Printer* self, uint32_t fnIdx)
 
 static inline BCValue Printer_genTemporary(Printer* self, BCType bct)
 {
-    BCValue result = {
-        .vType = BCValueType_Temporary,
-        .type = bct,
-    };
+    BCValue result = {BCValueType_Temporary};
+    {
+        result.type = bct;
+    }
+
     result.temporaryIndex = ++self->NumberOfTemporaries;
 
     Printer_PutStr(self, "BCValue ");
@@ -640,11 +645,11 @@ PR_OP1(DestroyLocal)
 
 static inline BCValue Printer_genLocal(Printer* self, BCType bct, const char* name)
 {
-    BCValue result = {
-        .vType = BCValueType_Local,
-        .type = bct,
-        .name = name
-    };
+    BCValue result = {BCValueType_Local};
+    {
+        result.type = bct;
+        result.name = name;
+    }
     result.localIndex = ++self->NumberOfLocals;
 
     Printer_PutStr(self, "BCValue ");
@@ -666,10 +671,10 @@ static inline BCValue Printer_genLocal(Printer* self, BCType bct, const char* na
 
 static inline BCValue Printer_GenParameter(Printer* self, BCType bct, const char* name)
 {
-    BCValue result = {
-        .vType = BCValueType_Parameter,
-        .type = bct,
-        .name = name
+    BCValue result = {BCValueType_Parameter};
+    {
+        result.type = bct;
+        result.name = name;
     };
 
     result.parameterIndex = ++self->NumberOfParameters;
@@ -691,6 +696,53 @@ static inline BCValue Printer_GenParameter(Printer* self, BCType bct, const char
     Printer_PutNewline(self);
 
     return result;
+}
+
+static inline BCValue Printer_GenExternal(Printer* self, BCType bct, const char* name)
+{
+    BCValue result = {BCValueType_External};
+    {
+        result.type = bct;
+        result.name = name;
+    };
+
+    result.parameterIndex = ++self->NumberOfParameters;
+    Printer_PutStr(self, "BCValue ");
+
+    Printer_PrintParameter(self, &result);
+
+    Printer_PutStr(self, " = GenExternal(");
+
+    Printer_PrintType(self, &bct);
+    Printer_PutStr(self, ", ");
+
+    if (name)
+        Printer_PutQuotedStr(self, name);
+    else
+        Printer_PutChar(self, '0');
+
+    Printer_PutStr(self, ");");
+    Printer_PutNewline(self);
+
+    return result;
+}
+
+
+static inline void Printer_MapExternal (Printer* self, BCValue* result,
+                                        void* memory, uint32_t sz)
+{
+    Printer_PutStr(self, "MapExternal(");
+
+    Printer_PrintBCValue(self, result);
+    Printer_PutStr(self, ", ");
+
+    Printer_PutHex(self, (intptr_t) memory);
+    Printer_PutStr(self, ", ");
+
+    Printer_PutU32(self, sz);
+    Printer_PutStr(self, ");");
+
+    Printer_PutNewline(self);
 }
 
 PR_OP1(emitFlag)
@@ -841,10 +893,14 @@ static inline void Printer_PrintCndJmp(Printer* self, const CndJmpBegin* jmp)
     Printer_PutU32(self, jmp->at.addr);
 }
 
-static inline CndJmpBegin Printer_BeginCndJmp(Printer* self, const BCValue* cond, _Bool ifTrue)
+static inline CndJmpBegin Printer_BeginCndJmp(Printer* self, const BCValue* cond, bool ifTrue)
 {
-    CndJmpBegin result =
-        {.at = {self->vIp}, .cond = cast(BCValue*)cond, .ifTrue = ifTrue};
+    CndJmpBegin result;
+
+    BCAddr at = {self->vIp};
+    result.at = at;
+    result.cond = cast(BCValue*)cond;
+    result.ifTrue = ifTrue;
 
     Printer_PutStr(self, "CndJmpBegin ");
     Printer_PrintCndJmp(self, &result);
@@ -893,14 +949,30 @@ PR_OP2(F64ToF32)
 PR_OP3(Memcmp)
 PR_OP3(Realloc)
 
-static inline BCValue Printer_run(Printer* self, uint32_t fnIdx, const BCValue* args, uint32_t n_args)
+static inline void Printer_ReadI32(Printer* self, const BCValue* val, const ReadI32_cb_t readCb, void* userCtx)
 {
-    return (BCValue) {BCValueType_Unknown};
+    self->vIp += 2;
+
+    Printer_PutStr(self, "ReadI32(");
+    Printer_PrintBCValue(self, val);
+    Printer_PutStr(self, ", ");
+    Printer_PutHex(self, (intptr_t) readCb);
+    Printer_PutStr(self, ", ");
+    Printer_PutHex(self, (intptr_t) userCtx);
+    Printer_PutStr(self, ");");
+    Printer_PutNewlineIndent(self);
 }
 
-static inline void Printer_destroy_instance(Printer* self)
+static inline BCValue Printer_run(Printer* self, uint32_t fnIdx, const BCValue* args, uint32_t n_args)
 {
-    free(self);
+    BCValue result = {BCValueType_Unknown};
+    return result;
+}
+
+static inline void Printer_fini_instance(Printer* instance)
+{
+    instance->allocMemory(instance, FREE_SIZE, cast(void*) instance->BufferStart);
+    instance->allocMemory(instance, FREE_SIZE, cast(void*) instance->ErrorInfos);
 }
 
 static inline uint32_t Printer_sizeof_instance(void)
@@ -908,118 +980,128 @@ static inline uint32_t Printer_sizeof_instance(void)
     return sizeof(Printer);
 }
 
-static inline void Printer_init_instance(Printer* intstance)
+static inline void Printer_clear_instance(Printer* instance)
 {
-    (*intstance) = (Printer){};
-    const uint32_t initialSize = 8192 * 8;
-
-    intstance->BufferStart = intstance->Buffer = (char*)malloc(initialSize);
-    intstance->BufferCapacity = initialSize;
-    intstance->ErrorInfoCount = 0;
-    intstance->ErrorInfoCapacity = 1024;
-    intstance->ErrorInfos = (ErrorInfo*) malloc(sizeof(ErrorInfo) * 1024);
+    instance->allocMemory = 0;
 }
 
-static inline void Printer_new_instance(Printer** resultP)
+static inline void Printer_init_instance(Printer* instance)
 {
-    Printer* result =  cast(Printer*)malloc(sizeof(Printer));
-
+    if (!instance->allocMemory)
+    {
+        instance->allocMemory = alloc_with_malloc;
+    }
     const uint32_t initialSize = 8192 * 8;
 
-    result->BufferStart = result->Buffer = (char*)malloc(initialSize);
-    result->BufferCapacity = initialSize;
-    result->ErrorInfoCount = 0;
-    result->ErrorInfoCapacity = 1024;
-    result->ErrorInfos = (ErrorInfo*) malloc(sizeof(ErrorInfo) * 1024);
-    result->NumberOfParameters = 0;
-    result->NumberOfFunctions = 0;
-    result->vIp = 0;
-
-    *resultP = result;
+    instance->BufferStart = instance->Buffer = cast(char*)
+        instance->allocMemory(instance->allocCtx, initialSize, 0);
+    instance->BufferCapacity = initialSize;
+    instance->ErrorInfoCount = 0;
+    instance->ErrorInfoCapacity = 1024;
+    instance->ErrorInfos = cast (ErrorInfo*)
+        instance->allocMemory(instance->allocCtx, sizeof(ErrorInfo) * 1024, 0);
 }
 
+static inline void Printer_set_alloc_memory(Printer* printer, alloc_fn_t allocFn, void* allocCtx)
+{
+    printer->allocMemory = allocFn;
+    printer->allocCtx = allocCtx;
+}
+
+static inline void Printer_set_get_typeinfo(Printer* printer, get_typeinfo_fn_t getTypeinfoFn, void* typeinfoCtx)
+{
+    printer->getTypeInfo = getTypeinfoFn;
+    printer->getTypeInfoCtx = typeinfoCtx;
+}
 
 #ifdef __cplusplus
 extern "C"
 #endif
 const BackendInterface Printer_interface = {
-    .name = "Printer",
+    /*.name =*/ "Printer",
 
-    .Initialize = (Initialize_t) Printer_Initialize,
-    .InitializeV = (InitializeV_t) Printer_InitializeV,
-    .Finalize = (Finalize_t) Printer_Finalize,
+    /*.Initialize =*/ (Initialize_t) Printer_Initialize,
+    /*.InitializeV =*/ (InitializeV_t) Printer_InitializeV,
+    /*.Finalize =*/ (Finalize_t) Printer_Finalize,
 
-    .BeginFunction = (BeginFunction_t) Printer_BeginFunction,
-    .EndFunction = (EndFunction_t) Printer_EndFunction,
+    /*.BeginFunction =*/ (BeginFunction_t) Printer_BeginFunction,
+    /*.EndFunction =*/ (EndFunction_t) Printer_EndFunction,
 
-    .GenTemporary = (GenTemporary_t) Printer_genTemporary,
-    .DestroyTemporary = (DestroyTemporary_t) Printer_DestroyTemporary,
-    .GenLocal = (GenLocal_t) Printer_genLocal,
-    .DestroyLocal = (DestroyLocal_t) Printer_DestroyLocal,
-    .GenParameter = (GenParameter_t) Printer_GenParameter,
-    .EmitFlag = (EmitFlag_t) Printer_emitFlag,
-    .Alloc = (Alloc_t) Printer_Alloc,
-    .Assert = (Assert_t) Printer_Assert,
-    .MemCpy = (MemCpy_t) Printer_MemCpy,
-    .File = (File_t) Printer_File,
-    .Line = (Line_t) Printer_Line,
-    .Comment = (Comment_t) Printer_Comment,
-    .Prt = (Prt_t) Printer_Prt,
-    .Set = (Set_t) Printer_Set,
-    .Ult3 = (Ult3_t) Printer_Ult3,
-    .Ule3 = (Ule3_t) Printer_Ule3,
-    .Lt3 = (Lt3_t) Printer_Lt3,
-    .Le3 = (Le3_t) Printer_Le3,
-    .Ugt3 = (Ugt3_t) Printer_Ugt3,
-    .Uge3 = (Uge3_t) Printer_Uge3,
-    .Gt3 = (Gt3_t) Printer_Gt3,
-    .Ge3 = (Ge3_t) Printer_Ge3,
-    .Eq3 = (Eq3_t) Printer_Eq3,
-    .Neq3 = (Neq3_t) Printer_Neq3,
-    .Add3 = (Add3_t) Printer_Add3,
-    .Sub3 = (Sub3_t) Printer_Sub3,
-    .Mul3 = (Mul3_t) Printer_Mul3,
-    .Div3 = (Div3_t) Printer_Div3,
-    .Udiv3 = (Udiv3_t) Printer_Udiv3,
-    .And3 = (And3_t) Printer_And3,
-    .Or3 = (Or3_t) Printer_Or3,
-    .Xor3 = (Xor3_t) Printer_Xor3,
-    .Lsh3 = (Lsh3_t) Printer_Lsh3,
-    .Rsh3 = (Rsh3_t) Printer_Rsh3,
-    .Mod3 = (Mod3_t) Printer_Mod3,
-    .Umod3 = (Umod3_t) Printer_Umod3,
-    .Not = (Not_t) Printer_Not,
-    .LoadFramePointer = (LoadFramePointer_t) Printer_LoadFramePointer,
-    .Call = (Call_t) Printer_Call,
-    .GenLabel = (GenLabel_t) Printer_GenLabel,
-    .Jmp = (Jmp_t) Printer_Jmp,
-    .BeginJmp = (BeginJmp_t) Printer_BeginJmp,
-    .EndJmp = (EndJmp_t) Printer_EndJmp,
-    .BeginCndJmp = (BeginCndJmp_t) Printer_BeginCndJmp,
-    .EndCndJmp = (EndCndJmp_t) Printer_EndCndJmp,
-    .Load8 = (Load8_t) Printer_Load8,
-    .Store8 = (Store8_t) Printer_Store8,
-    .Load16 = (Load16_t) Printer_Load16,
-    .Store16 = (Store16_t) Printer_Store16,
-    .Load32 = (Load32_t) Printer_Load32,
-    .Store32 = (Store32_t) Printer_Store32,
-    .Load64 = (Load64_t) Printer_Load64,
-    .Store64 = (Store64_t) Printer_Store64,
-    .Throw = (Throw_t) Printer_Throw,
-    .PushCatch = (PushCatch_t) Printer_PushCatch,
-    .PopCatch = (PopCatch_t) Printer_PopCatch,
-    .Ret = (Ret_t) Printer_Ret,
-    .IToF32 = (IToF32_t) Printer_IToF32,
-    .IToF64 = (IToF64_t) Printer_IToF64,
-    .F32ToI = (F32ToI_t) Printer_F32ToI,
-    .F64ToI = (F64ToI_t) Printer_F64ToI,
-    .F32ToF64 = (F32ToF64_t) Printer_F32ToF64,
-    .F64ToF32 = (F64ToF32_t) Printer_F64ToF32,
-    .Memcmp = (Memcmp_t) Printer_Memcmp,
-    .Realloc = (Realloc_t) Printer_Realloc,
-    .Run = (run_t) Printer_run,
-    .destroy_instance = (destroy_instance_t) Printer_destroy_instance,
-    .new_instance = (new_instance_t) Printer_new_instance,
-    .sizeof_instance = (sizeof_instance_t) Printer_sizeof_instance,
-    .init_instance = (init_instance_t) Printer_init_instance,
+    /*.GenTemporary =*/ (GenTemporary_t) Printer_genTemporary,
+    /*.DestroyTemporary =*/ (DestroyTemporary_t) Printer_DestroyTemporary,
+    /*.GenLocal =*/ (GenLocal_t) Printer_genLocal,
+    /*.DestroyLocal =*/ (DestroyLocal_t) Printer_DestroyLocal,
+    /*.GenParameter =*/ (GenParameter_t) Printer_GenParameter,
+    /*.GenExternal =*/ (GenExternal_t) Printer_GenExternal,
+    /*.MapExternal =*/ (MapExternal_t) Printer_MapExternal,
+    /*.EmitFlag =*/ (EmitFlag_t) Printer_emitFlag,
+    /*.Alloc =*/ (Alloc_t) Printer_Alloc,
+    /*.Assert =*/ (Assert_t) Printer_Assert,
+    /*.MemCpy =*/ (MemCpy_t) Printer_MemCpy,
+    /*.File =*/ (File_t) Printer_File,
+    /*.Line =*/ (Line_t) Printer_Line,
+    /*.Comment =*/ (Comment_t) Printer_Comment,
+    /*.Prt =*/ (Prt_t) Printer_Prt,
+    /*.Set =*/ (Set_t) Printer_Set,
+    /*.Ult3 =*/ (Ult3_t) Printer_Ult3,
+    /*.Ule3 =*/ (Ule3_t) Printer_Ule3,
+    /*.Lt3 =*/ (Lt3_t) Printer_Lt3,
+    /*.Le3 =*/ (Le3_t) Printer_Le3,
+    /*.Ugt3 =*/ (Ugt3_t) Printer_Ugt3,
+    /*.Uge3 =*/ (Uge3_t) Printer_Uge3,
+    /*.Gt3 =*/ (Gt3_t) Printer_Gt3,
+    /*.Ge3 =*/ (Ge3_t) Printer_Ge3,
+    /*.Eq3 =*/ (Eq3_t) Printer_Eq3,
+    /*.Neq3 =*/ (Neq3_t) Printer_Neq3,
+    /*.Add3 =*/ (Add3_t) Printer_Add3,
+    /*.Sub3 =*/ (Sub3_t) Printer_Sub3,
+    /*.Mul3 =*/ (Mul3_t) Printer_Mul3,
+    /*.Div3 =*/ (Div3_t) Printer_Div3,
+    /*.Udiv3 =*/ (Udiv3_t) Printer_Udiv3,
+    /*.And3 =*/ (And3_t) Printer_And3,
+    /*.Or3 =*/ (Or3_t) Printer_Or3,
+    /*.Xor3 =*/ (Xor3_t) Printer_Xor3,
+    /*.Lsh3 =*/ (Lsh3_t) Printer_Lsh3,
+    /*.Rsh3 =*/ (Rsh3_t) Printer_Rsh3,
+    /*.Mod3 =*/ (Mod3_t) Printer_Mod3,
+    /*.Umod3 =*/ (Umod3_t) Printer_Umod3,
+    /*.Not =*/ (Not_t) Printer_Not,
+    /*.LoadFramePointer =*/ (LoadFramePointer_t) Printer_LoadFramePointer,
+    /*.Call =*/ (Call_t) Printer_Call,
+    /*.GenLabel =*/ (GenLabel_t) Printer_GenLabel,
+    /*.Jmp =*/ (Jmp_t) Printer_Jmp,
+    /*.BeginJmp =*/ (BeginJmp_t) Printer_BeginJmp,
+    /*.EndJmp =*/ (EndJmp_t) Printer_EndJmp,
+    /*.BeginCndJmp =*/ (BeginCndJmp_t) Printer_BeginCndJmp,
+    /*.EndCndJmp =*/ (EndCndJmp_t) Printer_EndCndJmp,
+    /*.Load8 =*/ (Load8_t) Printer_Load8,
+    /*.Store8 =*/ (Store8_t) Printer_Store8,
+    /*.Load16 =*/ (Load16_t) Printer_Load16,
+    /*.Store16 =*/ (Store16_t) Printer_Store16,
+    /*.Load32 =*/ (Load32_t) Printer_Load32,
+    /*.Store32 =*/ (Store32_t) Printer_Store32,
+    /*.Load64 =*/ (Load64_t) Printer_Load64,
+    /*.Store64 =*/ (Store64_t) Printer_Store64,
+    /*.Throw =*/ (Throw_t) Printer_Throw,
+    /*.PushCatch =*/ (PushCatch_t) Printer_PushCatch,
+    /*.PopCatch =*/ (PopCatch_t) Printer_PopCatch,
+    /*.Ret =*/ (Ret_t) Printer_Ret,
+    /*.IToF32 =*/ (IToF32_t) Printer_IToF32,
+    /*.IToF64 =*/ (IToF64_t) Printer_IToF64,
+    /*.F32ToI =*/ (F32ToI_t) Printer_F32ToI,
+    /*.F64ToI =*/ (F64ToI_t) Printer_F64ToI,
+    /*.F32ToF64 =*/ (F32ToF64_t) Printer_F32ToF64,
+    /*.F64ToF32 =*/ (F64ToF32_t) Printer_F64ToF32,
+    /*.Memcmp =*/ (Memcmp_t) Printer_Memcmp,
+    /*.Realloc =*/ (Realloc_t) Printer_Realloc,
+    /*.Run =*/ (run_t) Printer_run,
+    /*.ReadI32 =*/ (ReadI32_t) Printer_ReadI32,
+
+    /*.sizeof_instance =*/ (sizeof_instance_t) Printer_sizeof_instance,
+    /*.clear_instance =*/ (clear_instance_t) Printer_clear_instance,
+    /*.init_instance =*/ (init_instance_t) Printer_init_instance,
+    /*.fini_instance =*/ (fini_instance_t) Printer_fini_instance,
+
+    /*.set_alloc_memory =*/ (set_alloc_memory_t) Printer_set_alloc_memory,
+    /*.set_get_typeinfo =*/ (set_get_typeinfo_t) Printer_set_get_typeinfo,
 };

@@ -5,8 +5,6 @@
 #ifndef _BC_INTERPRETER_BACKEND_H_
 #define _BC_INTERPRETER_BACKEND_H_
 
-#include "compat.h"
-
 typedef struct RetainedCall
 {
     BCValue fn;
@@ -113,7 +111,9 @@ typedef enum LongInst
     LongInst_FSub32,
     LongInst_FDiv32,
     LongInst_FMul32,
+#ifdef WITH_FMOD
     LongInst_FMod32,
+#endif
 #define FIRST_F32_CMP LongInst_FEq32
     LongInst_FEq32,
     LongInst_FNeq32,
@@ -133,7 +133,9 @@ typedef enum LongInst
     LongInst_FSub64,
     LongInst_FDiv64,
     LongInst_FMul64,
+#ifdef WITH_FMOD
     LongInst_FMod64,
+#endif
 #define FIRST_F64_CMP LongInst_FEq64
     LongInst_FEq64,
     LongInst_FNeq64,
@@ -172,6 +174,7 @@ typedef enum LongInst
     LongInst_SetMode,
 
     LongInst_Alloc, /// SP[hi & 0xFFFF] = heapSize; heapSize += SP[hi >> 16]
+    LongInst_MapExternal,
     LongInst_MemCpy,
     LongInst_Realloc,
 
@@ -226,6 +229,7 @@ typedef struct BCGen
 
     uint8_t parameterCount;
     uint16_t temporaryCount;
+    uint16_t externalCount;
 
     BCFunction* functions;
     uint32_t functionCount;
@@ -247,8 +251,11 @@ typedef struct BCGen
     uint32_t contextCount;
     uint32_t contextCapacity;
 
+    alloc_fn_t allocFn;
+    void* allocCtx;
+
     bool finalized;
-    uint32_t byteCodeArray[1024];
+    uint32_t byteCodeArray[512];
 } BCGen;
 
 typedef struct byte_code_array_t

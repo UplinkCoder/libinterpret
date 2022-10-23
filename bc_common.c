@@ -1,8 +1,11 @@
 #ifndef _BC_COMMON_C_
 #define _BC_COMMON_C_
 
-#include <stdint.h>
-#include <stdbool.h>
+#ifndef _WIN32
+#  include <stdint.h>
+#  include <stdbool.h>
+#endif
+
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -22,6 +25,7 @@
     ((size_t)((char *)&((st *)0)->m - (char *)0))
 
 #define CONSTEXPR
+BCValue BCValue_Init = { BCValueType_Unknown };
 
 const char*  BCTypeEnum_toChars(const BCTypeEnum* self)
 {
@@ -115,6 +119,12 @@ const char*  BCTypeEnum_toChars(const BCTypeEnum* self)
 
     case BCTypeEnum_Slice:
         return "BCTypeEnum_Slice";
+
+    case BCTypeEnum_Tuple:
+        return "BCTypeEnum_Tuple";
+
+    case BCTypeEnum_Enum:
+        return "BCTypeEnum_Enum";
     }
 
     assert(0);
@@ -418,6 +428,46 @@ static inline uint32_t BCValue_toU32(const BCValue* self)
     }
 #endif
 
+EXTERN_C BCValue BCValue_fromHeapref(const BCHeapRef heapRef)
+{
+    BCValue result;
+
+    result.vType = heapRef.vType;
+
+    switch (result.vType)
+    {
+    case BCValueType_StackValue:
+        result.stackAddr = heapRef.stackAddr;
+        result.temporaryIndex = heapRef.tmpIndex;
+        break;
+    case BCValueType_Parameter:
+        result.stackAddr = heapRef.stackAddr;
+        result.parameterIndex = heapRef.paramIndex;
+    break;
+    case BCValueType_Local:
+        result.stackAddr = heapRef.stackAddr;
+        result.temporaryIndex = heapRef.localIndex;
+        result.name = heapRef.name;
+        break;
+
+    case BCValueType_Temporary:
+        result.stackAddr = heapRef.stackAddr;
+        result.temporaryIndex = heapRef.tmpIndex;
+        break;
+
+    case BCValueType_HeapValue:
+        result.vType = BCValueType_Immediate;
+        result.type = BCType_u32;
+        result.imm32.imm32 = heapRef.heapAddr.addr;
+        break;
+
+    default:
+        assert(!"vType unsupported");
+    }
+
+    return result;
+}
+
 EXTERN_C bool BCValue_eq(const BCValue* lhs, const BCValue* rhs)
 {
     BCTypeEnum commonType = BCTypeEnum_commonTypeEnum(lhs->type.type, rhs->type.type);
@@ -468,11 +518,6 @@ EXTERN_C bool BCValue_eq(const BCValue* lhs, const BCValue* rhs)
     }
 
     return false;
-}
-
-EXTERN_C void BCValue_Init(BCValue* self)
-{
-    self->couldBeVoid = false;
 }
 
 #undef STRUCT_NAME
@@ -542,6 +587,7 @@ const uint32_t BCTypeEnum_basicTypeSize(const BCTypeEnum bct)
     case BCTypeEnum_Struct:
     case BCTypeEnum_Class:
     case BCTypeEnum_AArray:
+    case BCTypeEnum_Tuple:
         {
             result = 0;
         } break;
@@ -561,6 +607,8 @@ static inline const uint32_t adjustmentMask(BCTypeEnum t)
         mask = 0xFF;
     else if (typeSize == 2)
         mask = 0xFFFF;
+    else if (typeSize == 4)
+        mask = 0xFFFFFFFF;
 
     return mask;
 }
@@ -640,11 +688,11 @@ string doubleToString(double d)
 }
 */
 
-bool anyOf(BCTypeEnum type, const BCTypeEnum acceptedTypes[], uint32_t n_types)
+bool BCTypeEnum_anyOf(BCTypeEnum type, const BCTypeEnum acceptedTypes[], uint32_t n_types)
 {
     bool result = false;
 
-    for(int i = 0; i < n_types; i++)
+    for(uint32_t i = 0; i < n_types; i++)
     {
         if (type == acceptedTypes[i])
         {
@@ -665,14 +713,15 @@ EXTERN_C bool BCType_isBasicBCType(BCType bct)
 {
     return !(bct.type == BCTypeEnum_Struct || bct.type == BCTypeEnum_Array || bct.type == BCTypeEnum_Class
             || bct.type == BCTypeEnum_Slice || bct.type == BCTypeEnum_Undef || bct.type == BCTypeEnum_Ptr
-            || bct.type == BCTypeEnum_AArray);
+            || bct.type == BCTypeEnum_AArray || bct.type == BCTypeEnum_Tuple);
 }
 
 EXTERN_C bool BCValue_isStackValueOrParameter(const BCValue* val)
 {
     return (val->vType == BCValueType_StackValue
          || val->vType == BCValueType_Parameter
-         || val->vType == BCValueType_Local);
+         || val->vType == BCValueType_Local
+         || val->vType == BCValueType_Temporary);
 }
 
 /*
@@ -724,6 +773,32 @@ EXTERN_C BCValue imm64_(uint64_t value, bool signed_)
     ret.name = 0;
     ret.imm64.imm64 = value;
     return ret;
+}
+
+static inline void AllocDefaultHeap(BCHeap* newHeap)
+{
+    newHeap->heapMax = 1 << 14;
+    newHeap->heapData = (uint8_t*)malloc(newHeap->heapMax);
+    for(uint32_t i = 0; i < 255; i++)
+    {
+        newHeap->heapData[i] = (i & 0xff);
+    }
+    newHeap->heapSize = 128;
+}
+
+void* alloc_with_malloc(void* ctx, uint32_t size, void* fn)
+{
+    void* result = 0;
+
+    if (size != FREE_SIZE)
+    {
+        result = malloc(size);
+    }
+    else
+    {
+        free(fn);
+    }
+    return result;
 }
 
 /*
@@ -863,7 +938,9 @@ template ensureIsBCGen(BCGenT)
 }
 */
 /// commonType enum used for implicit conversion
-#define ARRAY_SIZE(A) (sizeof(A) / sizeof(A[0]))
+#ifndef ARRAY_SIZE
+#  define ARRAY_SIZE(A) (sizeof(A) / sizeof(A[0]))
+#endif
 
 BCTypeEnum BCTypeEnum_commonTypeEnum(BCTypeEnum lhs, BCTypeEnum rhs)
 {
@@ -895,7 +972,8 @@ BCTypeEnum BCTypeEnum_commonTypeEnum(BCTypeEnum lhs, BCTypeEnum rhs)
     {
         commonType = BCTypeEnum_i32;
     }
-    else if (anyOf(lhs, smallIntegerTypes, ARRAY_SIZE(smallIntegerTypes)) || anyOf(rhs, smallIntegerTypes, ARRAY_SIZE(smallIntegerTypes)))
+    else if (BCTypeEnum_anyOf(lhs, smallIntegerTypes, ARRAY_SIZE(smallIntegerTypes))
+        ||   BCTypeEnum_anyOf(rhs, smallIntegerTypes, ARRAY_SIZE(smallIntegerTypes)))
     {
         commonType = BCTypeEnum_i32;
     }

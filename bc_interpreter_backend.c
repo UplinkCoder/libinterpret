@@ -4,6 +4,14 @@
 #ifndef _BC_INTERPRETER_C_
 #define _BC_INTERPRETER_C_
 
+#ifdef _WIN32
+#  define UINT8_MAX 0xff
+#  define UINT16_MAX 0xffff
+#  define UINT32_MAX 0xffffffff
+#  define INT32_MAX 0x7ffffe
+#  define INT32_MIN 0x7fffff
+#endif
+
 #include <assert.h>
 #include <math.h>
 #include <stdlib.h>
@@ -13,7 +21,9 @@
 #include "backend_interface_funcs.h"
 #include "bc_interpreter_backend.h"
 
+#ifndef cast
 #define cast(T) (T)
+#endif
 
 #ifndef NDEBUG
 #  define DEBUG(...) __VA_ARGS__
@@ -54,13 +64,25 @@ static const int max_call_depth = 2000;
 #define INITIAL_LOCALS_CAPACITY 2048
 #define INITIAL_CALLS_CAPACITY 2048
 
+static inline void BCGen_set_alloc_memory(BCGen* self, alloc_fn_t alloc_fn, void* userCtx)
+{
+    self->allocFn = alloc_fn;
+    self->allocCtx = userCtx;
+}
+
 static inline void BCGen_Init(BCGen* self)
 {
+    if (!self->allocFn)
+    {
+        self->allocFn = alloc_with_malloc;
+    }
+
     self->byteCodeArrayExtra = 0;
     self->byteCodeCount = 0;
     self->byteCodeExtraCapacity = 0;
 
-    self->locals = (BCLocal*) malloc(sizeof(BCLocal) * INITIAL_LOCALS_CAPACITY);
+    self->locals = (BCLocal*) self->allocFn(self->allocCtx,
+        sizeof(BCLocal) * INITIAL_LOCALS_CAPACITY, 0);
     self->localCount = 0;
     self->localCapacity = INITIAL_LOCALS_CAPACITY;
 
@@ -73,15 +95,18 @@ static inline void BCGen_Init(BCGen* self)
     self->insideFunction = 0;
     self->functionIdx = 0;
 
-    self->calls = (RetainedCall*) malloc(sizeof(RetainedCall) * INITIAL_CALLS_CAPACITY);
+    self->calls = (RetainedCall*) self->allocFn(self->allocCtx,
+        sizeof(RetainedCall) * INITIAL_CALLS_CAPACITY, 0);
     self->callCount = 0;
     self->callCapacity = INITIAL_CALLS_CAPACITY;
 
-    self->functions = (BCFunction*)malloc(sizeof(BCFunction) * INITIAL_LOCALS_CAPACITY);
+    self->functions = (BCFunction*)self->allocFn(self->allocCtx,
+        sizeof(BCFunction) * INITIAL_LOCALS_CAPACITY, 0);
     self->functionCount = 0;
     self->functionCapacity = INITIAL_LOCALS_CAPACITY;
 
-    self->contexts = (ReadI32_ctx_t*) malloc(sizeof(ReadI32_ctx_t) * 64);
+    self->contexts = (ReadI32_ctx_t*) self->allocFn(self->allocCtx,
+        sizeof(ReadI32_ctx_t) * 64, 0);
     self->contextCount = 0;
     self->contextCapacity = 64;
 
@@ -90,9 +115,10 @@ static inline void BCGen_Init(BCGen* self)
 
 static inline void BCGen_Fini(BCGen* self)
 {
-    free(self->locals);
-    free(self->calls);
-    free(self->functions);
+    self->allocFn(self->allocCtx, FREE_SIZE, self->locals);
+    self->allocFn(self->allocCtx, FREE_SIZE, self->calls);
+    self->allocFn(self->allocCtx, FREE_SIZE, self->functions);
+    self->allocFn(self->allocCtx, FREE_SIZE, self->contexts);
 }
 
 typedef enum CtxM {
@@ -135,6 +161,11 @@ void BCGen_new_instance(BCGen** pResult)
     return ;
 }
 
+void BCGen_clear_instance(BCGen* instance)
+{
+    instance->allocFn = 0;
+}
+
 void BCGen_init_instance(BCGen* instance)
 {
     BCGen_Init(instance);
@@ -145,10 +176,9 @@ uint32_t BCGen_sizeof_instance(void)
     return sizeof(BCGen);
 }
 
-void BCGen_destroy_instance(BCGen* p)
+void BCGen_fini_instance(BCGen* instance)
 {
-    BCGen_Fini(p);
-    free(p);
+    BCGen_Fini(instance);
 }
 
 typedef struct Catch
@@ -167,6 +197,11 @@ typedef struct ReturnAddr
 
 #define MAX_CALL_DEPTH 2000
 #define LOCAL_STACK_SIZE 2048
+typedef struct BCExternal {
+  void* addr;
+  uint32_t size;
+  uint32_t mapAddr;
+} BCExternal;
 
 typedef struct BCInterpreter {
     int64_t* fp;
@@ -186,7 +221,10 @@ typedef struct BCInterpreter {
 
     uint32_t lastLine;
 
+    uint32_t mapPtr;
     BCValue cRetval;
+    BCExternal externals[16];
+    uint16_t externalsCount;
 
     int64_t stack[LOCAL_STACK_SIZE];
     ReturnAddr returnAddrs[MAX_CALL_DEPTH];
@@ -237,7 +275,7 @@ byte_code_array_t BCGen_CodeBytes(BCGen* self)
     byte_code_array_t result;
 
     result.Count = self->byteCodeCount;
-    result.Code = self->byteCodeArray;
+    result.Code = (int32_t*)self->byteCodeArray;
 
     return result;
 }
@@ -550,11 +588,13 @@ void BCGen_PrintCode(BCGen* self, uint32_t start, uint32_t end)
                 printf("LongInst_FDiv32 R[%d] /= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
+#ifdef WITH_FMOD
         case LongInst_FMod32:
             {
                 printf("LongInst_FMod32 R[%d] %%= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
+#endif
         case LongInst_FEq64 :
             {
                 printf("LongInst_FEq64 R[%d] == R[%d]\n", lhsOffset / 4, rhsOffset / 4);
@@ -620,11 +660,13 @@ void BCGen_PrintCode(BCGen* self, uint32_t start, uint32_t end)
                 printf("LongInst_FDiv64 R[%d] /= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
+#ifdef WITH_FMOD
         case LongInst_FMod64:
             {
                 printf("LongInst_FMod64 R[%d] %%= R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
+#endif
         case LongInst_Assert:
             {
                 printf("LongInst_Assert(R[%d])\n", opRefOffset / 4);
@@ -729,12 +771,12 @@ void BCGen_PrintCode(BCGen* self, uint32_t start, uint32_t end)
             break;
         case LongInst_JmpNZ:
             {
-                printf("LongInst_JmpNZ :%u\n", hi);
+                printf("LongInst_JmpNZ R[%d] :%u\n", opRefOffset / 4, hi);
             }
             break;
         case LongInst_JmpZ:
             {
-                printf("LongInst_JmpZ :%u\n", hi);
+                printf("LongInst_JmpZ R[%d] :%u\n", opRefOffset / 4, hi);
             }
             break;
         case LongInst_JmpFalse:
@@ -749,42 +791,42 @@ void BCGen_PrintCode(BCGen* self, uint32_t start, uint32_t end)
             break;
         case LongInst_HeapLoad8:
             {
-                printf("LongInst_HeapLoad8 R[%d] = HEAP[%d]\n", lhsOffset / 4, rhsOffset);
+                printf("LongInst_HeapLoad8 R[%d] = HEAP[R[%d]]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_HeapStore8:
             {
-                printf("LongInst_HeapStore8 HEAP[%d] = R[%d]\n", lhsOffset, rhsOffset / 4);
+                printf("LongInst_HeapStore8 HEAP[R[%d]] = R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_HeapLoad16:
             {
-                printf("LongInst_HeapLoad16 R[%d] = HEAP[%d]\n", lhsOffset / 4, rhsOffset);
+                printf("LongInst_HeapLoad16 R[%d] = HEAP[R[%d]]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_HeapStore16:
             {
-                printf("LongInst_HeapStore16 HEAP[%d] = R[%d]\n", lhsOffset, rhsOffset / 4);
+                printf("LongInst_HeapStore16 HEAP[R[%d]] = R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_HeapLoad32:
             {
-                printf("LongInst_HeapLoad32 R[%d] = HEAP[%d]\n", lhsOffset / 4, rhsOffset);
+                printf("LongInst_HeapLoad32 R[%d] = HEAP[R[%d]]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_HeapStore32:
             {
-                printf("LongInst_HeapStore32 HEAP[%d] = R[%d]\n", lhsOffset, rhsOffset / 4);
+                printf("LongInst_HeapStore32 HEAP[R[%d]] = R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_HeapLoad64:
             {
-                 printf("LongInst_HeapLoad64 R[%d] = HEAP[%d]\n", lhsOffset / 4, rhsOffset);
+                 printf("LongInst_HeapLoad64 R[%d] = HEAP[R[%d]]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_HeapStore64:
             {
-                printf("LongInst_HeapStore64 HEAP[%d] = R[%d]\n", lhsOffset, rhsOffset / 4);
+                printf("LongInst_HeapStore64 HEAP[R[%d]] = R[%d]\n", lhsOffset / 4, rhsOffset / 4);
             }
             break;
         case LongInst_Ret32:
@@ -838,6 +880,16 @@ void BCGen_PrintCode(BCGen* self, uint32_t start, uint32_t end)
             {
                 printf("LongInst_BuiltinCall\n");
                 assert(0);//, "Unsupported right now: BCBuiltin");
+            }
+            break;
+
+        case LongInst_MapExternal:
+            {
+                printf("LongInst_MapExternal R[%d] {sz: %u, ", opRefOffset / 4, imm32c);
+                lw = codeP[ip++];
+                hi = codeP[ip++];
+                printf("memPtr: %p}\n", ((intptr_t) (lw | ((uint64_t) hi) << 32)));
+                //assert(0);//, "Unsupported right now: BCBuiltin");
             }
             break;
 
@@ -1012,7 +1064,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
     {
         int argOffset = 1;
         int64_t* frameP = state.fp;
-        for(int i = 0; i < n_args;i++)
+        for(uint32_t i = 0; i < n_args;i++)
         {
             BCValue* arg = args + i;
             assert(arg->vType == BCValueType_Immediate);
@@ -1231,54 +1283,54 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_ImmEq:
             {
-                cond = ((*opRef) == imm32c);
+               cond = ((*opRef) == imm32c);
             }
             break;
         case LongInst_ImmNeq:
             {
-                cond = ((*opRef) != imm32c);
+               cond = ((*opRef) != imm32c);
             }
             break;
 
         case LongInst_ImmUlt:
             {
-                cond = (((int64_t)(*opRef)) < cast(uint32_t)hi);
+               cond = (((int64_t)(*opRef)) < cast(uint32_t)hi);
             }
             break;
         case LongInst_ImmUgt:
             {
-                cond = (((uint64_t)(*opRef)) > cast(uint32_t)hi);
+               cond = (((uint64_t)(*opRef)) > cast(uint32_t)hi);
             }
             break;
         case LongInst_ImmUle:
             {
-                cond = (((uint64_t)(*opRef)) <= cast(uint32_t)hi);
+               cond = (((uint64_t)(*opRef)) <= cast(uint32_t)hi);
             }
             break;
         case LongInst_ImmUge:
             {
-                cond = (((uint64_t)(*opRef)) >= cast(uint32_t)hi);
+               cond = (((uint64_t)(*opRef)) >= cast(uint32_t)hi);
             }
             break;
 
         case LongInst_ImmLt:
             {
-                cond = ((*opRef) < imm32c);
+               cond = ((*opRef) < imm32c);
             }
             break;
         case LongInst_ImmGt:
             {
-                cond = ((*opRef) > imm32c);
+               cond = ((*opRef) > imm32c);
             }
             break;
         case LongInst_ImmLe:
             {
-                cond = ((*opRef) <= imm32c);
+               cond = ((*opRef) <= imm32c);
             }
             break;
         case LongInst_ImmGe:
             {
-                cond = ((*opRef) >= imm32c);
+               cond = ((*opRef) >= imm32c);
             }
             break;
 
@@ -1431,12 +1483,14 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
                 *lhsRef = *(uint32_t*)&flhs;
             }
             break;
+#ifdef WITH_FMOD
         case LongInst_FMod32:
             {
                 flhs = fmodf(flhs, frhs);
                 *lhsRef = *(uint32_t*)&flhs;
             }
             break;
+#endif
         case LongInst_FEq64 :
             {
                cond = (dlhs == drhs);
@@ -1471,13 +1525,13 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
         case LongInst_F64ToF32 :
             {
                 double drhs_ = *cast(double*)rhs;
-                float flhs_ = drhs_;
+                float flhs_ = (float)drhs_;
                 *lhsRef = *(uint32_t*)&flhs_;
             }
             break;
         case LongInst_F64ToI :
             {
-                float drhs_ = *(double*)rhs;
+                double drhs_ = *(double*)rhs;
                 *lhsRef = (int64_t)drhs_;
             }
             break;
@@ -1513,6 +1567,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
                 *(cast(uint64_t*)lhsRef) = *cast(uint64_t*)&dlhs;
             }
             break;
+#ifdef WITH_FMOD
         case LongInst_FMod64:
             {
                 dlhs = fmod(dlhs, drhs);
@@ -1520,6 +1575,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
                 *(cast(uint64_t*)lhsRef) = *cast(uint64_t*)&dlhs;
             }
             break;
+#endif
 #pragma GCC diagnostic pop
 
         case LongInst_Assert:
@@ -1534,13 +1590,13 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_Eq:
             {
-                cond = ((*lhsRef) == (*rhs));
+               cond = ((*lhsRef) == (*rhs));
             }
             break;
 
         case LongInst_Neq:
             {
-                cond = ((*lhsRef) != *rhs);
+               cond = ((*lhsRef) != *rhs);
             }
             break;
 
@@ -1552,43 +1608,43 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
 
         case LongInst_Ult:
             {
-                cond = (((uint64_t)(*lhsRef)) < ((uint64_t)*rhs));
+               cond = (((uint64_t)(*lhsRef)) < ((uint64_t)*rhs));
             }
             break;
         case LongInst_Ugt:
             {
-                cond = ((uint64_t)(*lhsRef) > (uint64_t)*rhs);
+               cond = ((uint64_t)(*lhsRef) > (uint64_t)*rhs);
             }
             break;
         case LongInst_Ule:
             {
-                cond = (((uint64_t)(*lhsRef)) <= ((uint64_t)*rhs));
+               cond = (((uint64_t)(*lhsRef)) <= ((uint64_t)*rhs));
             }
             break;
         case LongInst_Uge:
             {
-                cond = (((uint64_t)(*lhsRef)) >= ((uint64_t)*rhs));
+               cond = (((uint64_t)(*lhsRef)) >= ((uint64_t)*rhs));
             }
             break;
 
         case LongInst_Lt:
             {
-                cond = ((*lhsRef) < *rhs);
+               cond = ((*lhsRef) < *rhs);
             }
             break;
         case LongInst_Gt:
             {
-                cond = ((*lhsRef) > *rhs);
+               cond = ((*lhsRef) > *rhs);
             }
             break;
         case LongInst_Le:
             {
-                cond = ((*lhsRef) <= *rhs);
+               cond = ((*lhsRef) <= *rhs);
             }
             break;
         case LongInst_Ge:
             {
-                cond = ((*lhsRef) >= *rhs);
+               cond = ((*lhsRef) >= *rhs);
             }
             break;
 #if 0
@@ -1794,6 +1850,26 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
         case LongInst_Flg:
             {
                 (*opRef) = cond;
+            }
+            break;
+
+        case LongInst_MapExternal:
+            {
+                uint32_t mapSize = hi;
+                const uint32_t lw = (codeP)[state.ip];
+                const uint32_t hi = (codeP)[state.ip + 1];
+                intptr_t addrInt = lw | (((uint64_t) hi) << 32);
+                BCExternal external;
+                state.ip += 2;
+
+                external.size = mapSize;
+                external.addr = (void*) addrInt;
+                external.mapAddr = state.mapPtr | externalAddrMask;
+                state.mapPtr += ALIGN16(external.size);
+
+                state.externals[state.externalsCount++] = external;
+                (*opRef) = state.externalsCount;
+                //assert(0);//, "Unsupported right now: BCBuiltin");
             }
             break;
 
@@ -2018,7 +2094,7 @@ L_LongInst_Comment:
                     uint8_t* lhsP = BCInterpreter_toRealPointer(&state, heapPtr, _lhs);
                     uint8_t* rhsP = BCInterpreter_toRealPointer(&state, heapPtr, _rhs);
 
-                    for(int i = 0; i < size; i++)
+                    for(uint32_t i = 0; i < size; i++)
                     {
                         uint8_t lhsC = *lhsP++;
                         uint8_t rhsC = *rhsP++;
@@ -2078,7 +2154,7 @@ Lbailout :
 
 static void inline BCGen_emit2_at(BCGen* self, uint32_t low, uint32_t high, uint32_t atIp)
 {
-    uint32_t* codeP;
+    uint32_t* codeP = 0;
     if (atIp < ARRAY_SIZE(self->byteCodeArray))
     {
         codeP = self->byteCodeArray + atIp;
@@ -2385,6 +2461,22 @@ static inline BCValue BCGen_genParameter(BCGen* self, BCType bct, const char* na
     return p;
 }
 
+static inline BCValue BCGen_genExternal(BCGen* self, BCType bct, const char* name)
+{
+    BCValue p;
+
+    p.type = bct;
+    p.vType = BCValueType_External;
+    p.externalIndex = ++self->externalCount;
+    p.stackAddr.addr = self->sp;
+
+    self->sp += 4;
+    p.name = name;
+
+    return p;
+}
+
+
 static inline uint32_t BCGen_beginJmp(BCGen* self)
 {
     uint32_t atIp = self->ip;
@@ -2479,7 +2571,7 @@ static inline BCValue BCGen_pushTemporary(BCGen* self, const BCValue* val)
     if (!BCValue_isStackValueOrParameter(val))
     {
         BCValue stackref;
-        stackref.type = BCType_u32;
+
         stackref.vType = BCValueType_StackValue;
         stackref.stackAddr.addr = self->sp;
         stackref.temporaryIndex = ++self->temporaryCount;
@@ -2509,7 +2601,7 @@ static inline void BCGen_emitArithInstruction(BCGen* self
     BCTypeEnum rhs_type_type = rhsP->type.type;
 
     BCTypeEnum commonType = BCTypeEnum_commonTypeEnum(lhs_type_type, rhs_type_type);
-    _Bool pushedLhs = 0, pushedRhs = 0;
+    bool pushedLhs = 0, pushedRhs = 0;
 
     // FIXME Implement utf8 <-> utf32 conversion
     assert(commonType == BCTypeEnum_i32 || commonType == BCTypeEnum_i64
@@ -2633,6 +2725,15 @@ Lreturn:
         BCGen_destroyTemporary(self, cast(BCValue*)lhsP);
 }
 
+static inline void BCGen_MapExternal (BCGen* self, BCValue* result,
+                                      void* memory, uint32_t sz)
+{
+    intptr_t memptr = (intptr_t) memory;
+    // assert(result->vType == BCValueType_StackValue);
+    BCGen_emit2(self, BCGen_ShortInst16(LongInst_MapExternal, result->stackAddr.addr), sz);
+    BCGen_emit2(self, memptr & 0xffffffff, memptr >> 32);
+}
+
 static inline void BCGen_emitFlag(BCGen* self, BCValue* lhs)
 {
     assert(BCValue_isStackValueOrParameter(lhs));
@@ -2701,8 +2802,8 @@ BC_ARITH_FUNC(And)
 
 static inline void BCGen_Load_Store(BCGen* self, BCValue *to, const BCValue* from, LongInst inst)
 {
-    _Bool pushedFrom = 0;
-    _Bool pushedTo = 0;
+    bool pushedFrom = 0;
+    bool pushedTo = 0;
     BCValue fromV;
     BCValue toV;
 
@@ -2710,7 +2811,7 @@ static inline void BCGen_Load_Store(BCGen* self, BCValue *to, const BCValue* fro
     {
         pushedFrom |= 1;
         fromV = BCGen_pushTemporary(self, from);
-        to = &fromV;
+        from = &fromV;
     }
 
     if (!BCValue_isStackValueOrParameter(to))
@@ -2764,7 +2865,7 @@ static inline void BCGen_MemCpy(BCGen* self, BCValue *dst, const BCValue* src, c
 static inline void BCGen_Ret(BCGen* self, const BCValue* val)
 {
     LongInst inst = ((BCTypeEnum_basicTypeSize(val->type.type) == 8) ? LongInst_Ret64 : LongInst_Ret32);
-    _Bool newValTemp = 0;
+    bool newValTemp = 0;
     BCValue newVal;
     uint32_t hi = 0;
 
@@ -2799,17 +2900,14 @@ static inline void BCGen_Ret(BCGen* self, const BCValue* val)
         BCGen_destroyTemporary(self, (BCValue*)val);
 }
 
-static inline BCValue BCGen_run(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_args)
+static inline BCValue BCGen_run(BCGen* self, uint32_t fnIdx,
+                                BCValue* args, uint32_t n_args, BCHeap* heap)
 {
     BCValue result;
 
     assert(self->finalized);
 
-    BCHeap newHeap = {0};
-    newHeap.heapMax = 1 << 14;
-    newHeap.heapData = (uint8_t*)malloc(newHeap.heapMax);
-
-    result = BCGen_interpret(self, fnIdx, args, n_args, &newHeap);
+    result = BCGen_interpret(self, fnIdx, args, n_args, heap);
 
     return result;
 }
@@ -2835,9 +2933,6 @@ void BCGen_endJmp(BCGen* self, BCAddr atIp, BCLabel target)
 
 #if 0
 {
-
-
-
     void Prt(BCValue value, bool isString = false)
     {
         if (value.vType == BCValueType_Immediate)
@@ -2954,9 +3049,10 @@ static inline void BCGen_InitializeV(BCGen* self, uint32_t n_args, va_list args)
 
 static inline void BCGen_Alloc(BCGen* self, BCValue *heapPtr, const BCValue* size)
 {
+    bool pushedSize = 0;
     BCValue newSize;
+
     assert(size->type.type == BCTypeEnum_u32);
-    _Bool pushedSize = 0;
 
     if (size->vType == BCValueType_Immediate)
     {
@@ -3076,6 +3172,18 @@ static inline void BCGen_Not(BCGen* self, BCValue *result, const BCValue* val)
 
 static inline void BCGen_Call(BCGen* self, BCValue *result, const BCValue* fn, BCValue* args, uint32_t n_args)
 {
+    assert(BCValue_isStackValueOrParameter(result));
+    BCValue fnValue = imm32(self->callCount + 1);
+    BCValue callTmp = BCGen_pushTemporary(self, &fnValue);
+    StackAddr call_id = callTmp.stackAddr;
+    BCValue* allocArgs = cast(BCValue*)
+        self->allocFn(self->allocCtx, sizeof(BCValue) * n_args, 0);
+    memcpy(allocArgs, args, n_args * sizeof(BCValue));
+    
+    RetainedCall rc = {*fn, allocArgs, n_args, self->functionIdx, self->ip, self->sp};
+    self->calls[self->callCount++] = rc;
+
+    BCGen_emitLongInstSS(self, LongInst_Call, result->stackAddr, call_id);
 }
 
 static inline BCLabel BCGen_genLabel(BCGen* self)
@@ -3108,8 +3216,12 @@ static inline void BCGen_ReadI32(BCGen* self, const BCValue* value, ReadI32_cb_t
 {
     assert(self->contextCount < self->contextCapacity);
 
-    ReadI32_ctx_t ctx = { .cb = ReadI32_cb,  .userCtx = userCtx };
     uint32_t ptr = self->contextCount;
+    ReadI32_ctx_t ctx;
+
+    ctx.cb = ReadI32_cb;
+    ctx.userCtx = userCtx;
+
     self->contexts[self->contextCount++] = ctx;
     assert(BCValue_isStackValueOrParameter(value));
 
@@ -3184,86 +3296,93 @@ static inline void BCGen_LoadFramePointer(BCGen* self, BCValue *result, const in
 extern "C"
 #endif
 const BackendInterface BCGen_interface = {
-    .name = "Bytecode Interpreter (BCGen)",
+    /*.name = */ "Bytecode Interpreter (BCGen)",
 
-    .Initialize = (Initialize_t) BCGen_Initialize,
+    /*.Initialize =*/ (Initialize_t) BCGen_Initialize,
 
-    .InitializeV = (InitializeV_t) BCGen_InitializeV,
-    .Finalize = (Finalize_t) BCGen_Finalize,
-    .BeginFunction = (BeginFunction_t) BCGen_beginFunction,
-    .EndFunction = (EndFunction_t) BCGen_endFunction,
-    .GenTemporary = (GenTemporary_t) BCGen_genTemporary,
-    .DestroyTemporary = (DestroyTemporary_t) BCGen_destroyTemporary,
-    .GenLocal = (GenLocal_t) BCGen_genLocal,
-    .DestroyLocal = (DestroyLocal_t) BCGen_destroyLocal,
-    .GenParameter = (GenParameter_t) BCGen_genParameter,
-    .EmitFlag = (EmitFlag_t) BCGen_emitFlag,
-    .Alloc = (Alloc_t) BCGen_Alloc,
-    .Assert = (Assert_t) BCGen_Assert,
-    .MemCpy = (MemCpy_t) BCGen_MemCpy,
-    .File = (File_t) BCGen_File,
-    .Line = (Line_t) BCGen_Line,
-    .Comment = (Comment_t) BCGen_Comment,
-    .Prt = (Prt_t) BCGen_Prt,
-    .Set = (Set_t) BCGen_Set,
-    .Ult3 = (Ult3_t) BCGen_Ult3,
-    .Ule3 = (Ule3_t) BCGen_Ule3,
-    .Lt3 = (Lt3_t) BCGen_Lt3,
-    .Le3 = (Le3_t) BCGen_Le3,
-    .Ugt3 = (Ugt3_t) BCGen_Ugt3,
-    .Uge3 = (Uge3_t) BCGen_Uge3,
-    .Gt3 = (Gt3_t) BCGen_Gt3,
-    .Ge3 = (Ge3_t) BCGen_Ge3,
-    .Eq3 = (Eq3_t) BCGen_Eq3,
-    .Neq3 = (Neq3_t) BCGen_Neq3,
-    .Add3 = (Add3_t) BCGen_Add3,
-    .Sub3 = (Sub3_t) BCGen_Sub3,
-    .Mul3 = (Mul3_t) BCGen_Mul3,
-    .Div3 = (Div3_t) BCGen_Div3,
-    .Udiv3 = (Udiv3_t) BCGen_Udiv3,
-    .And3 = (And3_t) BCGen_And3,
-    .Or3 = (Or3_t) BCGen_Or3,
-    .Xor3 = (Xor3_t) BCGen_Xor3,
-    .Lsh3 = (Lsh3_t) BCGen_Lsh3,
-    .Rsh3 = (Rsh3_t) BCGen_Rsh3,
-    .Mod3 = (Mod3_t) BCGen_Mod3,
-    .Umod3 = (Umod3_t) BCGen_Umod3,
-    .Not = (Not_t) BCGen_Not,
-    .LoadFramePointer = (LoadFramePointer_t) BCGen_LoadFramePointer,
-    .Call = (Call_t) BCGen_Call,
-    .GenLabel = (GenLabel_t) BCGen_genLabel,
-    .Jmp = (Jmp_t) BCGen_Jmp,
-    .BeginJmp = (BeginJmp_t) BCGen_beginJmp,
-    .EndJmp = (EndJmp_t) BCGen_endJmp,
-    .BeginCndJmp = (BeginCndJmp_t) BCGen_beginCndJmp,
-    .EndCndJmp = (EndCndJmp_t) BCGen_endCndJmp,
-    .Load8 = (Load8_t) BCGen_Load8,
-    .Store8 = (Store8_t) BCGen_Store8,
-    .Load16 = (Load16_t) BCGen_Load16,
-    .Store16 = (Store16_t) BCGen_Store16,
-    .Load32 = (Load32_t) BCGen_Load32,
-    .Store32 = (Store32_t) BCGen_Store32,
-    .Load64 = (Load64_t) BCGen_Load64,
-    .Store64 = (Store64_t) BCGen_Store64,
-    .Throw = (Throw_t) BCGen_Throw,
-    .PushCatch = (PushCatch_t) BCGen_PushCatch,
-    .PopCatch = (PopCatch_t) BCGen_PopCatch,
-    .Ret = (Ret_t) BCGen_Ret,
-    .IToF32 = (IToF32_t) BCGen_IToF32,
-    .IToF64 = (IToF64_t) BCGen_IToF64,
-    .F32ToI = (F32ToI_t) BCGen_F32ToI,
-    .F64ToI = (F64ToI_t) BCGen_F64ToI,
-    .F32ToF64 = (F32ToF64_t) BCGen_F32ToF64,
-    .F64ToF32 = (F64ToF32_t) BCGen_F64ToF32,
-    .Memcmp = (Memcmp_t) BCGen_Memcmp,
-    .Realloc = (Realloc_t) BCGen_Realloc,
-    .Run = (run_t) BCGen_run,
-    .destroy_instance = (destroy_instance_t) BCGen_destroy_instance,
-    .new_instance = (new_instance_t) BCGen_new_instance,
-    .sizeof_instance = BCGen_sizeof_instance,
-    .init_instance = (init_instance_t) BCGen_init_instance,
+    /*.InitializeV =*/ (InitializeV_t) BCGen_InitializeV,
+    /*.Finalize =*/ (Finalize_t) BCGen_Finalize,
+    /*.BeginFunction =*/ (BeginFunction_t) BCGen_beginFunction,
+    /*.EndFunction =*/ (EndFunction_t) BCGen_endFunction,
+    /*.GenTemporary =*/ (GenTemporary_t) BCGen_genTemporary,
+    /*.DestroyTemporary =*/ (DestroyTemporary_t) BCGen_destroyTemporary,
+    /*.GenLocal =*/ (GenLocal_t) BCGen_genLocal,
+    /*.DestroyLocal =*/ (DestroyLocal_t) BCGen_destroyLocal,
+    /*.GenParameter =*/ (GenParameter_t) BCGen_genParameter,
 
-    .ReadI32 = (ReadI32_t) BCGen_ReadI32,
+    /*.GenExternal =*/ (GenExternal_t) BCGen_genExternal,
+    /*.MapExternal =*/ (MapExternal_t) BCGen_MapExternal,
+
+    /*.EmitFlag =*/ (EmitFlag_t) BCGen_emitFlag,
+    /*.Alloc =*/ (Alloc_t) BCGen_Alloc,
+    /*.Assert =*/ (Assert_t) BCGen_Assert,
+    /*.MemCpy =*/ (MemCpy_t) BCGen_MemCpy,
+    /*.File =*/ (File_t) BCGen_File,
+    /*.Line =*/ (Line_t) BCGen_Line,
+    /*.Comment =*/ (Comment_t) BCGen_Comment,
+    /*.Prt =*/ (Prt_t) BCGen_Prt,
+    /*.Set =*/ (Set_t) BCGen_Set,
+    /*.Ult3 =*/ (Ult3_t) BCGen_Ult3,
+    /*.Ule3 =*/ (Ule3_t) BCGen_Ule3,
+    /*.Lt3 =*/ (Lt3_t) BCGen_Lt3,
+    /*.Le3 =*/ (Le3_t) BCGen_Le3,
+    /*.Ugt3 =*/ (Ugt3_t) BCGen_Ugt3,
+    /*.Uge3 =*/ (Uge3_t) BCGen_Uge3,
+    /*.Gt3 =*/ (Gt3_t) BCGen_Gt3,
+    /*.Ge3 =*/ (Ge3_t) BCGen_Ge3,
+    /*.Eq3 =*/ (Eq3_t) BCGen_Eq3,
+    /*.Neq3 =*/ (Neq3_t) BCGen_Neq3,
+    /*.Add3 =*/ (Add3_t) BCGen_Add3,
+    /*.Sub3 =*/ (Sub3_t) BCGen_Sub3,
+    /*.Mul3 =*/ (Mul3_t) BCGen_Mul3,
+    /*.Div3 =*/ (Div3_t) BCGen_Div3,
+    /*.Udiv3 =*/ (Udiv3_t) BCGen_Udiv3,
+    /*.And3 =*/ (And3_t) BCGen_And3,
+    /*.Or3 =*/ (Or3_t) BCGen_Or3,
+    /*.Xor3 =*/ (Xor3_t) BCGen_Xor3,
+    /*.Lsh3 =*/ (Lsh3_t) BCGen_Lsh3,
+    /*.Rsh3 =*/ (Rsh3_t) BCGen_Rsh3,
+    /*.Mod3 =*/ (Mod3_t) BCGen_Mod3,
+    /*.Umod3 =*/ (Umod3_t) BCGen_Umod3,
+    /*.Not =*/ (Not_t) BCGen_Not,
+    /*.LoadFramePointer =*/ (LoadFramePointer_t) BCGen_LoadFramePointer,
+    /*.Call =*/ (Call_t) BCGen_Call,
+    /*.GenLabel =*/ (GenLabel_t) BCGen_genLabel,
+    /*.Jmp =*/ (Jmp_t) BCGen_Jmp,
+    /*.BeginJmp =*/ (BeginJmp_t) BCGen_beginJmp,
+    /*.EndJmp =*/ (EndJmp_t) BCGen_endJmp,
+    /*.BeginCndJmp =*/ (BeginCndJmp_t) BCGen_beginCndJmp,
+    /*.EndCndJmp =*/ (EndCndJmp_t) BCGen_endCndJmp,
+    /*.Load8 =*/ (Load8_t) BCGen_Load8,
+    /*.Store8 =*/ (Store8_t) BCGen_Store8,
+    /*.Load16 =*/ (Load16_t) BCGen_Load16,
+    /*.Store16 =*/ (Store16_t) BCGen_Store16,
+    /*.Load32 =*/ (Load32_t) BCGen_Load32,
+    /*.Store32 =*/ (Store32_t) BCGen_Store32,
+    /*.Load64 =*/ (Load64_t) BCGen_Load64,
+    /*.Store64 =*/ (Store64_t) BCGen_Store64,
+    /*.Throw =*/ (Throw_t) BCGen_Throw,
+    /*.PushCatch =*/ (PushCatch_t) BCGen_PushCatch,
+    /*.PopCatch =*/ (PopCatch_t) BCGen_PopCatch,
+    /*.Ret =*/ (Ret_t) BCGen_Ret,
+    /*.IToF32 =*/ (IToF32_t) BCGen_IToF32,
+    /*.IToF64 =*/ (IToF64_t) BCGen_IToF64,
+    /*.F32ToI =*/ (F32ToI_t) BCGen_F32ToI,
+    /*.F64ToI =*/ (F64ToI_t) BCGen_F64ToI,
+    /*.F32ToF64 =*/ (F32ToF64_t) BCGen_F32ToF64,
+    /*.F64ToF32 =*/ (F64ToF32_t) BCGen_F64ToF32,
+    /*.Memcmp =*/ (Memcmp_t) BCGen_Memcmp,
+    /*.Realloc =*/ (Realloc_t) BCGen_Realloc,
+    /*.Run =*/ (run_t) BCGen_run,
+    /*.ReadI32 =*/ (ReadI32_t) BCGen_ReadI32,
+
+    /*.sizeof_instance =*/ BCGen_sizeof_instance,
+    /*.clear_instance =*/ (clear_instance_t) BCGen_clear_instance,
+    /*.init_instance =*/ (init_instance_t) BCGen_init_instance,
+    /*.fini_instance =*/ (fini_instance_t) BCGen_fini_instance,
+
+    /*.set_alloc_memory =*/ (set_alloc_memory_t) BCGen_set_alloc_memory,
+    /*.set_get_typeinfo =*/ (set_get_typeinfo_t) 0,
 };
 
 #endif

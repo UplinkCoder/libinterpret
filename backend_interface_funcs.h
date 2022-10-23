@@ -2,7 +2,7 @@
 #define _BACKEND_INTERFACE_FUNCS_H_
 
 #include <stdarg.h>
-#include "compat.h"
+#include "../os/compat.h"
 #include "bc_common.h"
 
 typedef void (*Initialize_t) (void* ctx, uint32_t n_args, ...);
@@ -19,6 +19,10 @@ typedef BCValue (*GenLocal_t) (void* ctx, BCType bct, const char* name);
 typedef void (*DestroyLocal_t) (void* ctx, BCValue* local);
 
 typedef BCValue (*GenParameter_t) (void* ctx, BCType bct, const char* name);
+
+typedef BCValue (*GenExternal_t) (void* ctx, BCType bct, const char* name);
+typedef void (*MapExternal_t) (void* ctx, BCValue* result, void* memory, uint32_t sz);
+
 typedef void (*EmitFlag_t) (void* ctx, BCValue* lhs);
 
 typedef void (*Alloc_t) (void* ctx, BCValue *heapPtr, const BCValue* size);
@@ -89,16 +93,24 @@ typedef void (*F64ToF32_t) (void* ctx, BCValue *result, const BCValue* rhs);
 typedef void (*Memcmp_t) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs);
 typedef void (*Realloc_t) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs, const uint32_t size);
 
-typedef BCValue (*run_t) (void* ctx, uint32_t fnIdx, const BCValue* args, uint32_t n_args);
-typedef void (*destroy_instance_t) (void* ctx);
-typedef void (*new_instance_t) (void ** result_p);
+typedef BCValue (*run_t) (void* ctx, uint32_t fnIdx, const BCValue* args, uint32_t n_args, BCHeap* heap);
+
 typedef uint32_t (*sizeof_instance_t) (void);
-typedef void (*init_instance_t) (void * result_p);
+typedef void (*clear_instance_t) (void* instance);
+typedef void (*init_instance_t) (void * instance);
+typedef void (*fini_instance_t) (void* instance);
 
 typedef void (*ReadI32_t) (void* ctx, const BCValue* val, const ReadI32_cb_t readCb, void* userCtx);
 typedef void (*ReadI32_cb_t)(uint32_t value, void* userCtx);
 
 typedef void (*ValueCallback_cb_t)(BCValue* value, void* userCtx);
+
+#define FREE_SIZE 4294967294U
+typedef void* (*alloc_fn_t) (void* ctx, uint32_t size, void* func);
+typedef BCTypeInfo* (*get_typeinfo_fn_t) (void* ctx, BCType* type);
+
+typedef void (*set_alloc_memory_t) (void* ctx, alloc_fn_t alloc_fn, void* userCtx);
+typedef void (*set_get_typeinfo_t) (void* ctx, get_typeinfo_fn_t get_typeinfo_fn, void* userCtx);
 
 typedef struct BackendInterface
 {
@@ -118,6 +130,9 @@ typedef struct BackendInterface
     void (*const DestroyLocal) (void* ctx, BCValue* local);
 
     BCValue (*const GenParameter) (void* ctx, BCType bct, const char* name);
+
+    BCValue (*const GenExternal) (void* ctx, BCType bct, const char* name);
+    void (*const MapExternal) (void* ctx, BCValue* result, void* memory, uint32_t sz);
 
     void (*const EmitFlag) (void* ctx, BCValue* lhs);
 
@@ -158,7 +173,6 @@ typedef struct BackendInterface
     void (*const LoadFramePointer) (void* ctx, BCValue *result, const int32_t offset);
 
     void (*const Call) (void* ctx, BCValue *result, const BCValue* fn, const BCValue* args, uint32_t n_args);
-
     BCLabel (*const GenLabel) (void* ctx);
     void (*const Jmp) (void* ctx, BCLabel target);
     BCAddr (*const BeginJmp) (void* ctx);
@@ -190,14 +204,17 @@ typedef struct BackendInterface
     void (*const Memcmp) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs);
     void (*const Realloc) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs, const uint32_t size);
 
-    BCValue (*const Run) (void* ctx, uint32_t fnIdx, const BCValue* args, uint32_t n_args);
-
-    void (*const destroy_instance) (void* ctx);
-    void (*const new_instance) (void ** result_p);
-    uint32_t (*const sizeof_instance) (void);
-    void (*const init_instance) (void* ctx);
-
+    BCValue (*const Run) (void* ctx, uint32_t fnIdx, const BCValue* args, uint32_t n_args, BCHeap* heap);
     void (*const ReadI32) (void* ctx, const BCValue* val, const ReadI32_cb_t readCb, void* userCtx);
+
+
+    uint32_t (*const sizeof_instance) (void);
+    void (*const clear_instance) (void* ctx);
+    void (*const init_instance) (void* ctx);
+    void (*const fini_instance) (void* ctx);
+
+    void (*const set_alloc_memory) (void* ctx, alloc_fn_t alloc_fn, void* userCtx);
+    void (*const set_get_typeinfo) (void* ctx, get_typeinfo_fn_t get_typeinfo_fn, void* userCtx);
 } BackendInterface;
 
 #endif
