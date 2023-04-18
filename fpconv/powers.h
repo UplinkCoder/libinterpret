@@ -1,4 +1,4 @@
-#include "../../os/compat.h"
+#include "../compat.h"
 
 #define npowers     87
 #define steppowers  8

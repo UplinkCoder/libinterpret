@@ -11,8 +11,8 @@ int main(int argc, char* argv[])
 {
     const BackendInterface i = Printer_interface;
 
-    void* c;
-    i.new_instance(&c);
+    void* c = malloc(i.sizeof_instance());
+    i.init_instance(c);
 
     uint32_t fIdx;
 
@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
             BCValue res = i.GenLocal(c, BCType_i32, "result");
             BCValue imm__64 = imm32(64);
             i.Eq3(c, 0, &a, &imm__64);
-            
+
             CndJmpBegin cj = i.BeginCndJmp(c, 0, 0);
             i.Add3(c, &res, &a, &b);
             i.EndCndJmp(c, &cj, i.GenLabel(c));

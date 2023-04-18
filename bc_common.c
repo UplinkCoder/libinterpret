@@ -171,6 +171,9 @@ const char* BCValueType_toChars(const BCValueType* vTypePtr)
         case BCValueType_Unknown:
             result = "BCValueType_Unknown";
         break;
+        case BCValueType_External:
+            result = "BCValueType_External";
+        break;
         case BCValueType_Temporary:
             result = "BCValueType_Temporary";
         break;
@@ -721,7 +724,8 @@ EXTERN_C bool BCValue_isStackValueOrParameter(const BCValue* val)
     return (val->vType == BCValueType_StackValue
          || val->vType == BCValueType_Parameter
          || val->vType == BCValueType_Local
-         || val->vType == BCValueType_Temporary);
+         || val->vType == BCValueType_Temporary
+         || val->vType == BCValueType_External);
 }
 
 /*

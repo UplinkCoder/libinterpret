@@ -1,6 +1,8 @@
 #ifndef _BC_COMMON_H_
 #define _BC_COMMON_H_ 1
 
+#define FREE_SIZE 4294967294U
+
 #ifndef _MSC_VER
 #  include <stdint.h>
 #  include <stdbool.h>
@@ -159,6 +161,7 @@ typedef enum BCValueType
     BCValueType_Immediate  = 2 << 3,
     BCValueType_HeapValue  = 3 << 3,
     BCValueType_External   = 4 << 3,
+    BCValueType_ExternalFunction   = 5 << 3,
 
     BCValueType_LastCond  = 0xFB,
     BCValueType_Bailout   = 0xFC,
@@ -288,27 +291,58 @@ typedef struct CndJmpBegin
 #define AddrMask  ((1 << 31) | \
                    (1 << 30))
 
-#define stackAddrMask  ((1 << 31) | \
-                        (1 << 30))
+#define stackAddrMask  ((1 << 31) | (1 << 30))
+#define externalAddrMask (1 << 31 | 0 << 30)
+#define heapAddrMask (0 << 31 | 0 << 30)
 
-#define externalAddrMask (1 << 31)
+typedef enum address_kind_t
+{
+    AddressKind_Invalid,
+
+    AddressKind_Frame,
+    AddressKind_Heap,
+    AddressKind_External,
+
+    AddressKind_Max
+} address_kind_t;
+
+static inline address_kind_t ClassifyAddress(uint32_t unrealPointer)
+{
+    address_kind_t result = AddressKind_Invalid;
+
+    switch ((unrealPointer & AddrMask))
+    {
+        case stackAddrMask:
+            result = AddressKind_Frame;
+        break;
+        case externalAddrMask:
+            result = AddressKind_External;
+        break;
+        case heapAddrMask:
+            result = AddressKind_Heap;
+        break;
+    }
+
+    return result;
+}
+
 
 static inline bool isStackAddress(uint32_t unrealPointer)
 {
-    // a stack address has the upper 1 bits set
+    // a stack address has the upper 2 bits set
     return (unrealPointer & AddrMask) == stackAddrMask;
 }
 
 static inline bool isExternalAddress(uint32_t unrealPointer)
 {
-    // an external address has
+    // an external address has 1 upper bit set
     return (unrealPointer & AddrMask) == externalAddrMask;
 }
 
 static inline bool isHeapAddress(uint32_t unrealPointer)
 {
-    // a heap address does not have the upper 1 bits set
-    return (unrealPointer & stackAddrMask) == 0;
+    // a heap address does not have the upper 2 bits set
+    return (unrealPointer & stackAddrMask) == heapAddrMask;
 }
 
 static inline uint32_t toStackOffset(uint32_t unrealPointer)
@@ -515,7 +549,7 @@ typedef struct BCEnumType
     const char* name;
 
     uint16_t nMembers;
-    BCTypeEnum baseType;
+    BCType baseType;
 } BCEnumType;
 
 typedef struct BCPointerType
@@ -549,7 +583,7 @@ typedef enum BCTypeInfoKind
 
 typedef struct BCTypeInfo
 {
-    BCTypeEnum kind;
+    BCTypeInfoKind kind;
     union
     {
         struct BCEnumType enumType;

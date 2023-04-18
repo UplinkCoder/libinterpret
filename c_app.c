@@ -15,8 +15,8 @@ int main(int argc, char* argv[])
 
     const BackendInterface i = BCGen_interface;
 
-    void* c;
-    i.new_instance(&c);
+    void* c = malloc(i.sizeof_instance());
+    i.init_instance(c);
 
     uint32_t fIdx;
     uint32_t add_idx;
@@ -48,12 +48,12 @@ int main(int argc, char* argv[])
         arguments[0] = imm32(a);
         arguments[1] = imm32(b);
 
-        BCValue res = i.Run(c, add_idx, arguments, 2);
+        BCValue res = i.Run(c, add_idx, arguments, 2, 0);
 
         printf("%d + %d = %d\n", a, b, res.imm32.imm32);
     }
 
-    i.destroy_instance(c);
+    i.fini_instance(c);
 
     return 0;
 }

@@ -2,7 +2,7 @@
 #define _BACKEND_INTERFACE_FUNCS_H_
 
 #include <stdarg.h>
-#include "../os/compat.h"
+#include "compat.h"
 #include "bc_common.h"
 
 typedef void (*Initialize_t) (void* ctx, uint32_t n_args, ...);
@@ -22,6 +22,9 @@ typedef BCValue (*GenParameter_t) (void* ctx, BCType bct, const char* name);
 
 typedef BCValue (*GenExternal_t) (void* ctx, BCType bct, const char* name);
 typedef void (*MapExternal_t) (void* ctx, BCValue* result, void* memory, uint32_t sz);
+
+typedef BCValue (*GenExternalFunc_t) (void* ctx, BCType bct, const char* name);
+typedef void (*MapExternalFunc_t) (void* ctx, BCValue* result, BCValue* func);
 
 typedef void (*EmitFlag_t) (void* ctx, BCValue* lhs);
 
@@ -58,6 +61,9 @@ typedef void (*Rsh3_t) (void* ctx, BCValue *result, const BCValue* lhs, const BC
 typedef void (*Mod3_t) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs);
 typedef void (*Umod3_t) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs);
 typedef void (*Not_t) (void* ctx, BCValue *result, const BCValue* val);
+
+typedef void (*SetFramePointer_t) (void* ctx, BCValue* frameP);
+typedef void (*GetFramePointer_t) (void* ctx, BCValue* frameP);
 
 typedef void (*LoadFramePointer_t) (void* ctx, BCValue *result, const int32_t offset);
 
@@ -107,7 +113,7 @@ typedef void (*ValueCallback_cb_t)(BCValue* value, void* userCtx);
 
 #define FREE_SIZE 4294967294U
 typedef void* (*alloc_fn_t) (void* ctx, uint32_t size, void* func);
-typedef BCTypeInfo* (*get_typeinfo_fn_t) (void* ctx, BCType* type);
+typedef BCTypeInfo (*get_typeinfo_fn_t) (void* ctx, BCType* type);
 
 typedef void (*set_alloc_memory_t) (void* ctx, alloc_fn_t alloc_fn, void* userCtx);
 typedef void (*set_get_typeinfo_t) (void* ctx, get_typeinfo_fn_t get_typeinfo_fn, void* userCtx);
@@ -133,6 +139,9 @@ typedef struct BackendInterface
 
     BCValue (*const GenExternal) (void* ctx, BCType bct, const char* name);
     void (*const MapExternal) (void* ctx, BCValue* result, void* memory, uint32_t sz);
+
+    BCValue (*const GenExternalFunc) (void* ctx, BCType bct, const char* name);
+    void (*const MapExternalFunc) (void* ctx, BCValue* result, BCValue* fnP);
 
     void (*const EmitFlag) (void* ctx, BCValue* lhs);
 

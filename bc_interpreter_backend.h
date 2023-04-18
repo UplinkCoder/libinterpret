@@ -1,7 +1,6 @@
 /*
  * Written By Stefan Koch in 2016 - 2022
 */
-
 #ifndef _BC_INTERPRETER_BACKEND_H_
 #define _BC_INTERPRETER_BACKEND_H_
 
@@ -175,6 +174,7 @@ typedef enum LongInst
 
     LongInst_Alloc, /// SP[hi & 0xFFFF] = heapSize; heapSize += SP[hi >> 16]
     LongInst_MapExternal,
+    LongInst_MapExternalFunc,
     LongInst_MemCpy,
     LongInst_Realloc,
 
@@ -193,8 +193,6 @@ typedef enum LongInst
 
 #include "bc_common.h"
 #include "backend_interface_funcs.h"
-
-
 
 typedef enum BCFunctionTypeEnum
 {
@@ -244,8 +242,8 @@ typedef struct BCGen
     uint32_t localCapacity;
 
     RetainedCall* calls;
-    uint32_t callCount;
-    uint32_t callCapacity;
+    uint32_t callsCount;
+    uint32_t callsCapacity;
 
     ReadI32_ctx_t* contexts;
     uint32_t contextCount;
@@ -253,6 +251,9 @@ typedef struct BCGen
 
     alloc_fn_t allocFn;
     void* allocCtx;
+
+    get_typeinfo_fn_t getTypeInfoFn;
+    void* getTypeInfoCtx;
 
     bool finalized;
     uint32_t byteCodeArray[512];

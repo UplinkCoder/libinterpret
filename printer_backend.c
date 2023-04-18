@@ -1,6 +1,7 @@
 #include "backend_interface_funcs.h"
 #include "bc_common.h"
 #include "fpconv/fpconv.c"
+#include "utils/int_to_str.c"
 #include <assert.h>
 
 #define cast(T) (T)
@@ -24,6 +25,8 @@ typedef struct Printer
 
     uint32_t NumberOfLocals;
     uint32_t NumberOfTemporaries;
+    uint32_t NumberOfExternals;
+    uint32_t NumberOfExternalFunctions;
 
     ErrorInfo* ErrorInfos;
     uint32_t ErrorInfoCount;
@@ -397,6 +400,18 @@ static inline void Printer_PrintBCValue(Printer* self, const BCValue* val)
                     Printer_PutStr(self, "*/");
             }
         } break;
+    case BCValueType_External:
+    {
+        Printer_PutStr(self, "ext");
+        Printer_PutU32(self, val->externalIndex);
+    } break;
+
+    case BCValueType_ExternalFunction:
+    {
+        Printer_PutStr(self, "extFn");
+        Printer_PutU32(self, val->externalIndex);
+    } break;
+
     case BCValueType_Unknown:
         {
             Printer_PutStr(self, "BCValue.init");
@@ -407,7 +422,7 @@ static inline void Printer_PrintBCValue(Printer* self, const BCValue* val)
             char* msg = errorBuffer;
 
             CatStr(msg, cast(char*)"Printing for ");
-            CatStr(msg, cast(char*)BCValueType_toChars(&val->vType));
+            CatStr(msg, cast(char*) BCValueType_toChars(&val->vType));
             CatStr(msg, cast(char*)" unimplemented ");
             *msg = '\0';
 
@@ -421,9 +436,6 @@ extern void Printer_StreamToFile(Printer* self, FILE* fd)
     uint32_t sz = self->Buffer - self->BufferStart;
     uint32_t bytes_written = fwrite(self->BufferStart, 1, sz, fd);
     assert(sz == bytes_written);
-
-    self->Buffer = cast(char*)self->BufferStart;
-    self->BufferCapacity += sz;
 }
 
 static inline void Printer_Op3(Printer* self,
@@ -706,10 +718,10 @@ static inline BCValue Printer_GenExternal(Printer* self, BCType bct, const char*
         result.name = name;
     };
 
-    result.parameterIndex = ++self->NumberOfParameters;
+    result.externalIndex = ++self->NumberOfExternals;
     Printer_PutStr(self, "BCValue ");
 
-    Printer_PrintParameter(self, &result);
+    Printer_PrintBCValue(self, &result);
 
     Printer_PutStr(self, " = GenExternal(");
 
@@ -742,6 +754,50 @@ static inline void Printer_MapExternal (Printer* self, BCValue* result,
     Printer_PutU32(self, sz);
     Printer_PutStr(self, ");");
 
+    Printer_PutNewline(self);
+}
+
+static inline BCValue Printer_GenExternalFunc(Printer* self, BCType bct, const char* name)
+{
+    BCValue result = {BCValueType_ExternalFunction};
+    {
+        result.type = bct;
+        result.name = name;
+    };
+
+    result.parameterIndex = ++self->NumberOfExternalFunctions;
+    Printer_PutStr(self, "BCValue ");
+
+    Printer_PrintBCValue(self, &result);
+
+    Printer_PutStr(self, " = GenExternalFunc(");
+
+    Printer_PrintType(self, &bct);
+    Printer_PutStr(self, ", ");
+
+    if (name)
+        Printer_PutQuotedStr(self, name);
+    else
+        Printer_PutChar(self, '0');
+
+    Printer_PutStr(self, ");");
+    Printer_PutNewline(self);
+
+    return result;
+}
+
+
+static inline void Printer_MapExternalFunc (Printer* self, BCValue* result,
+                                            BCValue* funcP)
+{
+    Printer_PutStr(self, "MapExternalFunc(");
+
+    Printer_PrintBCValue(self, result);
+    Printer_PutStr(self, ", ");
+
+    Printer_PrintBCValue(self, funcP);
+
+    Printer_PutStr(self, ");");
     Printer_PutNewline(self);
 }
 
@@ -1034,6 +1090,8 @@ const BackendInterface Printer_interface = {
     /*.GenParameter =*/ (GenParameter_t) Printer_GenParameter,
     /*.GenExternal =*/ (GenExternal_t) Printer_GenExternal,
     /*.MapExternal =*/ (MapExternal_t) Printer_MapExternal,
+    /*.GenExternal =*/ (GenExternalFunc_t) Printer_GenExternalFunc,
+    /*.MapExternal =*/ (MapExternalFunc_t) Printer_MapExternalFunc,
     /*.EmitFlag =*/ (EmitFlag_t) Printer_emitFlag,
     /*.Alloc =*/ (Alloc_t) Printer_Alloc,
     /*.Assert =*/ (Assert_t) Printer_Assert,
