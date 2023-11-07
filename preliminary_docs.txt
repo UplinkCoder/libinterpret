@@ -1,0 +1,71 @@
+    name: A string representing the name of the backend.
+
+    Initialize: A function pointer to initialize the code generation context, taking a variable number of arguments.
+
+    InitializeV: A function pointer to initialize the code generation context, taking a variable number of arguments using a va_list.
+
+    Finalize: A function pointer to finalize the code generation context.
+
+    Memory management functions:
+        BeginFunction: Begins the code generation for a function, taking a function ID and function metadata as arguments.
+        EndFunction: Ends the code generation for a function, taking the function context and function index as arguments.
+        GenTemporary: Generates a temporary value of a given type.
+        DestroyTemporary: Destroys a temporary value.
+        GenLocal: Generates a local variable of a given type with a specified name.
+        DestroyLocal: Destroys a local variable.
+        GenParameter: Generates a function parameter of a given type with a specified name.
+        GenExternal: Generates an external variable of a given type with a specified name.
+        MapExternal: Maps an external variable to a memory location with a specified size.
+        GenExternalFunc: Generates an external function of a given type with a specified name.
+        MapExternalFunc: Maps an external function to a function pointer.
+        EmitFlag: Emits a flag indicating a condition is true or false.
+        Alloc: Allocates memory on the heap.
+        Assert: Asserts a condition and throws an error if it fails.
+        MemCpy: Copies memory from one location to another.
+        File: Sets the current file being processed.
+        Line: Sets the current line number being processed.
+        Comment: Adds a comment to the generated code.
+        Prt: Prints the value to the output.
+
+    Arithmetic and logical operations:
+        Set: Assigns a value to a variable.
+        Comparison operations: Ult3, Ule3, Lt3, Le3, Ugt3, Uge3, Gt3, Ge3, Eq3, Neq3.
+        Arithmetic operations: Add3, Sub3, Mul3, Div3, Udiv3, And3, Or3, Xor3, Lsh3, Rsh3, Mod3, Umod3.
+        Not: Performs a logical NOT operation.
+
+    Function-related operations:
+        LoadFramePointer: Loads the value of the frame pointer at a given offset.
+        Call: Calls a function with arguments.
+        GenLabel: Generates a new label for control flow.
+        Jmp: Performs an unconditional jump to a target label.
+        BeginJmp: Begins a conditional jump with a given condition and target label.
+        EndJmp: Ends a conditional jump, specifying the instruction pointer and target label.
+        BeginCndJmp: Begins a conditional jump with a given condition and target label.
+        EndCndJmp: Ends a conditional jump, specifying the jump context and target label.
+
+    Memory access operations:
+        Load8, Load16, Load32, Load64: Loads values from memory.
+        Store8, Store16, Store32, Store64: Stores values to memory.
+
+    Exception handling:
+        Throw: Throws an exception.
+        PushCatch: Pushes a catch block.
+        PopCatch: Pops a catch block.
+        Ret: Returns from a function.
+
+    Type conversion operations:
+        IToF32, IToF64, F32ToI, F64ToI, F32ToF64, F64ToF32: Performs type conversions.
+
+    Additional utility functions:
+        Memcmp: Compares two memory regions.
+        Realloc: Reallocates memory.
+        Run: Executes a function with arguments.
+        ReadI32: Reads a 32-bit integer using a callback function.
+
+    Miscellaneous functions:
+        sizeof_instance: Returns the size of the code generation context.
+        clear_instance: Clears the code generation context.
+        init_instance: Initializes the code generation context.
+        fini_instance: Finalizes the code generation context.
+        set_alloc_memory: Sets the memory allocation function.
+        set_get_typeinfo: Sets the function for retrieving type information.
