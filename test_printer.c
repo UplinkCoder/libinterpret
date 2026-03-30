@@ -1,12 +1,9 @@
 #include "stdio.h"
 #include "bc_common.h"
 #include "backend_interface_funcs.h"
+#include "printer_backend.c"
 
-typedef struct Printer Printer;
-extern void Printer_StreamToFile(Printer* self, FILE* fd);
 void test_printer_putstr_batching();
-
-extern BackendInterface Printer_interface;
 
 int main(int argc, char* argv[])
 {
@@ -186,5 +183,5 @@ void test_printer_putstr_batching()
 
     Printer_fini_instance(&printer);
 
-    printf("\n✅ All Printer_PutStr tests passed!\n");
+    printf("\n ✓ All Printer_PutStr tests passed! ✓\n");
 }
