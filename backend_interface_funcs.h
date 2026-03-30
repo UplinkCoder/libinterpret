@@ -179,6 +179,8 @@ typedef struct BackendInterface
     void (*const Umod3) (void* ctx, BCValue *result, const BCValue* lhs, const BCValue* rhs);
     void (*const Not) (void* ctx, BCValue *result, const BCValue* val);
 
+//    void (*SetFramePointer_t) (void* ctx, BCValue* frameP);
+//    void (*GetFramePointer_t) (void* ctx, BCValue* frameP);
     void (*const LoadFramePointer) (void* ctx, BCValue *result, const int32_t offset);
 
     void (*const Call) (void* ctx, BCValue *result, const BCValue* fn, const BCValue* args, uint32_t n_args);
@@ -215,7 +217,6 @@ typedef struct BackendInterface
 
     BCValue (*const Run) (void* ctx, uint32_t fnIdx, const BCValue* args, uint32_t n_args, BCHeap* heap);
     void (*const ReadI32) (void* ctx, const BCValue* val, const ReadI32_cb_t readCb, void* userCtx);
-
 
     uint32_t (*const sizeof_instance) (void);
     void (*const clear_instance) (void* ctx);

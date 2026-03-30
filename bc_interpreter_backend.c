@@ -137,8 +137,8 @@ typedef enum CtxM {
     CtxM_GetFramePointer,
     CtxM_SetFramePointer,
 
-    CtxM_AddframePointer,
-    CtxM_SubframePointer,
+    CtxM_AddFramePointer,
+    CtxM_SubFramePointer,
 
     CtxM_max
 } CtxM;
@@ -147,8 +147,8 @@ static const char* CtxM_strings[] = {
     "Invalid (Undef)"
   , "GetFramePointer"
   , "SetFramePointer"
-  , "AddframePointer"
-  , "SubframePointer"
+  , "AddFramePointer"
+  , "SubFramePointer"
   , "Invalid (max)"
 };
 
@@ -1519,7 +1519,7 @@ BCValue BCGen_interpret(BCGen* self, uint32_t fnIdx, BCValue* args, uint32_t n_a
             break;
         case LongInst_FNeq64 :
             {
-               cond = (dlhs < drhs);
+               cond = (dlhs != drhs);
             }
             break;
         case LongInst_FLt64 :
